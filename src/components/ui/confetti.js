@@ -3,7 +3,7 @@
  * Duolingo-inspired full-width gentle raindown
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 
 class Confetti {
   constructor() {

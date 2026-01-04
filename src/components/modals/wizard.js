@@ -2,9 +2,9 @@
  * Trade Wizard - Guided trade logging with thesis prompts
  */
 
-import { state } from './state.js';
-import { showToast } from './ui.js';
-import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput } from './utils.js';
+import { state } from '../../core/state.js';
+import { showToast } from '../ui/ui.js';
+import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput } from '../../core/utils.js';
 
 class TradeWizard {
   constructor() {

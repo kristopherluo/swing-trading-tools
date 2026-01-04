@@ -2,24 +2,24 @@
  * Main - Application entry point
  */
 
-import { state } from './state.js';
-import { calculator } from './calculator.js';
-import { journal } from './journal.js';
-import { settings } from './settings.js';
-import { theme, keyboard, settingsToggle, focusManager, hintArrow, tooltipHandler } from './ui.js';
-import { trimModal } from './trimModal.js';
-import { wizard } from './wizard.js';
-import { confetti } from './confetti.js';
-import { achievements } from './achievements.js';
-import { soundFx } from './soundFx.js';
-import { dataManager } from './dataManager.js';
-import { clearDataModal } from './clearDataModal.js';
-import { viewManager } from './viewManager.js';
-import { stats } from './stats.js';
-import { equityChart } from './statsChart.js';
-import { positionsView } from './positionsView.js';
-import { journalView } from './journalView.js';
-import { compoundView } from './compoundView.js';
+import { state } from './core/state.js';
+import { calculator } from './features/calculator/calculator.js';
+import { journal } from './features/journal/journal.js';
+import { settings } from './features/settings/settings.js';
+import { theme, keyboard, settingsToggle, focusManager, hintArrow, tooltipHandler } from './components/ui/ui.js';
+import { trimModal } from './components/modals/trimModal.js';
+import { wizard } from './components/modals/wizard.js';
+import { confetti } from './components/ui/confetti.js';
+import { achievements } from './components/ui/achievements.js';
+import { soundFx } from './components/ui/soundFx.js';
+import { dataManager } from './core/dataManager.js';
+import { clearDataModal } from './components/modals/clearDataModal.js';
+import { viewManager } from './components/ui/viewManager.js';
+import { stats } from './features/stats/stats.js';
+import { equityChart } from './features/stats/statsChart.js';
+import { positionsView } from './features/positions/positionsView.js';
+import { journalView } from './features/journal/journalView.js';
+import { compoundView } from './features/compound/compoundView.js';
 
 class App {
   constructor() {

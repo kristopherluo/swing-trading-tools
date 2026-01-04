@@ -2,11 +2,11 @@
  * Settings - Settings panel and configuration
  */
 
-import { state } from './state.js';
-import { parseNumber, formatCurrency, formatWithCommas } from './utils.js';
-import { showToast } from './ui.js';
-import { dataManager } from './dataManager.js';
-import { clearDataModal } from './clearDataModal.js';
+import { state } from '../../core/state.js';
+import { parseNumber, formatCurrency, formatWithCommas } from '../../core/utils.js';
+import { showToast } from '../../components/ui/ui.js';
+import { dataManager } from '../../core/dataManager.js';
+import { clearDataModal } from '../../components/modals/clearDataModal.js';
 
 class Settings {
   constructor() {

@@ -2,8 +2,8 @@
  * ClearDataModal - Confirmation modal for clearing all data
  */
 
-import { state } from './state.js';
-import { dataManager } from './dataManager.js';
+import { state } from '../../core/state.js';
+import { dataManager } from '../../core/dataManager.js';
 
 class ClearDataModal {
   constructor() {

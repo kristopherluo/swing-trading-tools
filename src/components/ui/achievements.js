@@ -3,7 +3,7 @@
  * MVP: 3 achievements (First Steps, Day One, Hot Streak)
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 import { showToast } from './ui.js';
 import { confetti } from './confetti.js';
 import { soundFx } from './soundFx.js';

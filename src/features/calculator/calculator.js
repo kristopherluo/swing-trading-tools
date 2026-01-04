@@ -2,9 +2,9 @@
  * Calculator - Core position sizing calculations
  */
 
-import { state } from './state.js';
-import { parseNumber, formatCurrency, formatPercent, formatNumber, formatWithCommas } from './utils.js';
-import { showToast } from './ui.js';
+import { state } from '../../core/state.js';
+import { parseNumber, formatCurrency, formatPercent, formatNumber, formatWithCommas } from '../../core/utils.js';
+import { showToast } from '../../components/ui/ui.js';
 
 class Calculator {
   constructor() {

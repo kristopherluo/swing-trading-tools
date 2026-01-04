@@ -2,10 +2,10 @@
  * Positions View - Full-fledged open positions manager
  */
 
-import { state } from './state.js';
-import { formatCurrency, formatPercent } from './utils.js';
-import { trimModal } from './trimModal.js';
-import { viewManager } from './viewManager.js';
+import { state } from '../../core/state.js';
+import { formatCurrency, formatPercent } from '../../core/utils.js';
+import { trimModal } from '../../components/modals/trimModal.js';
+import { viewManager } from '../../components/ui/viewManager.js';
 
 class PositionsView {
   constructor() {

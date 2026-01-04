@@ -2,9 +2,9 @@
  * TrimModal - Handles partial position exits (trimming trades)
  */
 
-import { state } from './state.js';
-import { formatCurrency, formatNumber } from './utils.js';
-import { showToast } from './ui.js';
+import { state } from '../../core/state.js';
+import { formatCurrency, formatNumber } from '../../core/utils.js';
+import { showToast } from '../ui/ui.js';
 
 class TrimModal {
   constructor() {

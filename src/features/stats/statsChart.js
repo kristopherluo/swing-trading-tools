@@ -2,7 +2,7 @@
  * Stats Chart - Canvas-based equity curve chart
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 import { stats } from './stats.js';
 
 class EquityChart {

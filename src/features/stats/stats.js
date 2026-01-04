@@ -2,7 +2,7 @@
  * Stats - Trading statistics calculations and DOM rendering
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 
 class Stats {
   constructor() {

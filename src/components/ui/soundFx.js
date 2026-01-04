@@ -2,7 +2,7 @@
  * SoundFX - Web Audio API sound effects for UI feedback
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 
 class SoundFX {
   constructor() {

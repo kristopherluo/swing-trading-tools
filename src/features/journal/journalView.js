@@ -2,11 +2,11 @@
  * Journal View - Full trade history with filtering and analysis
  */
 
-import { state } from './state.js';
-import { formatCurrency, formatPercent, formatDate } from './utils.js';
-import { trimModal } from './trimModal.js';
-import { viewManager } from './viewManager.js';
-import { dataManager } from './dataManager.js';
+import { state } from '../../core/state.js';
+import { formatCurrency, formatPercent, formatDate } from '../../core/utils.js';
+import { trimModal } from '../../components/modals/trimModal.js';
+import { viewManager } from '../../components/ui/viewManager.js';
+import { dataManager } from '../../core/dataManager.js';
 
 class JournalView {
   constructor() {

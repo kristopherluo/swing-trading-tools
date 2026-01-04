@@ -1,0 +1,224 @@
+/* ========================================
+   Cards - Card component styles
+   ======================================== */
+
+/* === Cards === */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--border-radius-lg);
+  margin-bottom: var(--space-4);
+}
+
+.card:last-child {
+  margin-bottom: 0;
+}
+
+.card--highlight {
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  border-color: var(--border-default);
+}
+
+.card--hero {
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  border-color: var(--primary);
+  border-width: 2px;
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-glow);
+  transition: box-shadow 0.4s ease, border-color 0.4s ease, opacity 0.4s ease;
+}
+
+/* When results are active, dim the hero card */
+.card--hero.inactive {
+  border-color: var(--border-default);
+  box-shadow: none;
+  opacity: 0.85;
+}
+
+.card--collapsible {
+  margin-bottom: var(--space-4);
+}
+
+.card--compact {
+  margin-bottom: 0;
+}
+
+.card--compact .card__header {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: none;
+}
+
+.card--compact .card__body {
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+
+.card--compact .card__title {
+  font-size: var(--text-sm);
+}
+
+/* Collapsible Card - additional styles */
+.card--collapsible.card--collapsible {
+  overflow: hidden;
+}
+
+.card--collapsible.open {
+  overflow: visible;
+}
+
+.card__header--toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background-color var(--transition-fast);
+  border-radius: calc(var(--border-radius-lg) - 1px);
+}
+
+.card--collapsible.open .card__header--toggle {
+  border-radius: calc(var(--border-radius-lg) - 1px) calc(var(--border-radius-lg) - 1px) 0 0;
+}
+
+.card__header--toggle:hover {
+  background-color: var(--bg-hover);
+}
+
+.card__header--toggle:focus {
+  outline: none;
+}
+
+.card__chevron {
+  margin-left: auto;
+  transition: transform var(--transition-fast);
+  color: var(--text-muted);
+}
+
+.card--collapsible.open .card__chevron {
+  transform: rotate(180deg);
+}
+
+/* Panel Divider */
+.panel-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 0 0 var(--space-4) 0;
+}
+
+/* Settings Card - Collapsible */
+.card--settings {
+  position: relative;
+}
+
+.card--settings.open {
+  border-radius: var(--border-radius-lg);
+}
+
+.card--settings .card__header {
+  padding: var(--space-3) var(--space-4);
+}
+
+.card--settings .card__title {
+  font-size: var(--text-sm);
+}
+
+.card--settings .card__icon {
+  font-size: var(--text-base);
+}
+
+.settings-summary {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  background: var(--bg-inset);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--border-radius-sm);
+  margin-left: auto;
+  margin-right: var(--space-2);
+}
+
+.card--settings.open .settings-summary {
+  display: none;
+}
+
+/* Quick Settings - push-down behavior (content flows naturally, never clips) */
+.card--settings .card__body--collapsible {
+  position: static;
+  padding: 0 var(--space-4);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+}
+
+.card--settings.open .card__body--collapsible {
+  padding: var(--space-4);
+}
+
+.card--settings .settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settings-item .input-label {
+  margin-bottom: 0;
+}
+
+.settings-item .preset-group {
+  margin-bottom: var(--space-2);
+}
+
+/* card__body--collapsible styles now in animations.css for smooth expand/collapse */
+
+.card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.card__icon {
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.card__title {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.card__tagline {
+  display: none;
+  margin: 0;
+  padding: var(--space-3) var(--space-5) 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .card__tagline {
+    display: block;
+  }
+}
+
+.card__body {
+  padding: var(--space-5);
+  overflow-x: hidden;
+}
+

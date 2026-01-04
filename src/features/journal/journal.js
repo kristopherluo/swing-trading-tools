@@ -2,14 +2,14 @@
  * Journal - Trade logging and management
  */
 
-import { state } from './state.js';
-import { formatCurrency, formatPercent, formatDate, createTimestampFromDateInput } from './utils.js';
-import { showToast } from './ui.js';
-import { trimModal } from './trimModal.js';
-import { dataManager } from './dataManager.js';
-import { wizard } from './wizard.js';
-import { confetti } from './confetti.js';
-import { viewManager } from './viewManager.js';
+import { state } from '../../core/state.js';
+import { formatCurrency, formatPercent, formatDate, createTimestampFromDateInput } from '../../core/utils.js';
+import { showToast } from '../../components/ui/ui.js';
+import { trimModal } from '../../components/modals/trimModal.js';
+import { dataManager } from '../../core/dataManager.js';
+import { wizard } from '../../components/modals/wizard.js';
+import { confetti } from '../../components/ui/confetti.js';
+import { viewManager } from '../../components/ui/viewManager.js';
 
 class Journal {
   constructor() {

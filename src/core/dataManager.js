@@ -3,7 +3,7 @@
  */
 
 import { state } from './state.js';
-import { showToast } from './ui.js';
+import { showToast } from '../components/ui/ui.js';
 
 // These will be set after modules are initialized to avoid circular dependencies
 let settingsModule = null;

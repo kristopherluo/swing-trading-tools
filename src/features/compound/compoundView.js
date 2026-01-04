@@ -2,8 +2,8 @@
  * CompoundView - Compound growth visualization table
  */
 
-import { parseNumber, formatWithCommas } from './utils.js';
-import { state } from './state.js';
+import { parseNumber, formatWithCommas } from '../../core/utils.js';
+import { state } from '../../core/state.js';
 
 class CompoundView {
   constructor() {

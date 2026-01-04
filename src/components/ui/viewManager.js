@@ -2,7 +2,7 @@
  * View Manager - Handles view swapping between 4 views
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 
 class ViewManager {
   constructor() {

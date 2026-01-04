@@ -2,7 +2,7 @@
  * UI - Toasts, theme toggle, and UI utilities
  */
 
-import { state } from './state.js';
+import { state } from '../../core/state.js';
 
 // Toast container reference
 let toastContainer = null;
