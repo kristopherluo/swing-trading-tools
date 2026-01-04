@@ -6,11 +6,14 @@ import { state } from '../../core/state.js';
 import { formatCurrency, formatPercent } from '../../core/utils.js';
 import { trimModal } from '../../components/modals/trimModal.js';
 import { viewManager } from '../../components/ui/viewManager.js';
+import { priceTracker } from '../../core/priceTracker.js';
+import { showToast } from '../../components/ui/ui.js';
 
 class PositionsView {
   constructor() {
     this.elements = {};
     this.currentFilter = 'all';
+    this.autoRefreshInterval = null;
   }
 
   init() {
@@ -25,8 +28,21 @@ class PositionsView {
 
     // Listen for view changes
     state.on('viewChanged', (data) => {
-      if (data.to === 'positions') this.render();
+      if (data.to === 'positions') {
+        this.render();
+        this.startAutoRefresh();
+      } else {
+        this.stopAutoRefresh();
+      }
     });
+
+    // Listen for price updates
+    state.on('pricesUpdated', () => this.render());
+
+    // Start auto-refresh if we're on positions page
+    if (state.ui.currentView === 'positions') {
+      this.startAutoRefresh();
+    }
   }
 
   cacheElements() {
@@ -37,7 +53,9 @@ class PositionsView {
       // Risk bar
       riskBar: document.getElementById('positionsRiskBar'),
       openRisk: document.getElementById('positionsOpenRisk'),
+      openPnL: document.getElementById('positionsOpenPnL'),
       riskLevel: document.getElementById('positionsRiskLevel'),
+      refreshPricesBtn: document.getElementById('refreshPositionsPricesBtn'),
 
       // Grid
       grid: document.getElementById('positionsGrid'),
@@ -58,6 +76,13 @@ class PositionsView {
     if (this.elements.goToDashboard) {
       this.elements.goToDashboard.addEventListener('click', () => {
         viewManager.navigateTo('dashboard');
+      });
+    }
+
+    // Refresh prices button
+    if (this.elements.refreshPricesBtn) {
+      this.elements.refreshPricesBtn.addEventListener('click', async () => {
+        await this.refreshPrices();
       });
     }
 
@@ -127,6 +152,10 @@ class PositionsView {
       if (this.elements.openRisk) {
         this.elements.openRisk.textContent = '$0.00';
       }
+      if (this.elements.openPnL) {
+        this.elements.openPnL.textContent = '$0.00';
+        this.elements.openPnL.className = 'positions-risk-bar__value positions-risk-bar__value--pnl';
+      }
       if (this.elements.riskLevel) {
         this.elements.riskLevel.textContent = 'CASH';
         this.elements.riskLevel.className = 'positions-risk-bar__value positions-risk-bar__value--indicator';
@@ -150,6 +179,10 @@ class PositionsView {
       return sum + netRisk;
     }, 0);
 
+    // Calculate total unrealized P&L
+    const pnlData = priceTracker.calculateTotalUnrealizedPnL();
+    const totalPnL = pnlData.totalPnL;
+
     const riskPercent = (totalRisk / state.account.currentSize) * 100;
 
     // Determine risk level
@@ -165,6 +198,14 @@ class PositionsView {
 
     if (this.elements.openRisk) {
       this.elements.openRisk.textContent = `${formatCurrency(totalRisk)} (${formatPercent(riskPercent)})`;
+    }
+
+    // Update Open P&L
+    if (this.elements.openPnL) {
+      const pnlClass = totalPnL >= 0 ? 'text-success' : 'text-danger';
+      const pnlSign = totalPnL >= 0 ? '+' : '';
+      this.elements.openPnL.textContent = `${pnlSign}${formatCurrency(totalPnL)}`;
+      this.elements.openPnL.className = `positions-risk-bar__value positions-risk-bar__value--pnl ${pnlClass}`;
     }
 
     if (this.elements.riskLevel) {
@@ -189,6 +230,9 @@ class PositionsView {
 
       // Check if trade is "free rolled" - realized profit covers remaining risk
       const isFreeRoll = isTrimmed && realizedPnL >= (grossRisk - 0.01);
+
+      // Get price data from tracker
+      const pnlData = priceTracker.calculateUnrealizedPnL(trade);
 
       // Determine status
       let statusClass = trade.status;
@@ -218,6 +262,12 @@ class PositionsView {
               <span class="position-card__detail-label">Entry</span>
               <span class="position-card__detail-value">${formatCurrency(trade.entry)}</span>
             </div>
+            ${pnlData ? `
+            <div class="position-card__detail">
+              <span class="position-card__detail-label">Current</span>
+              <span class="position-card__detail-value ${pnlData.unrealizedPnL >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(pnlData.currentPrice)}</span>
+            </div>
+            ` : ''}
             <div class="position-card__detail">
               <span class="position-card__detail-label">Stop</span>
               <span class="position-card__detail-value">${formatCurrency(trade.stop)}</span>
@@ -235,6 +285,12 @@ class PositionsView {
               <span class="position-card__risk-label">Open Risk</span>
               <span class="position-card__risk-value">${formatCurrency(netRisk)} (${formatPercent(riskPercent)})</span>
             </div>
+            ${pnlData ? `
+            <div class="position-card__risk-row">
+              <span class="position-card__risk-label">Unrealized P&L</span>
+              <span class="position-card__risk-value ${pnlData.unrealizedPnL >= 0 ? 'text-success' : 'text-danger'}">${pnlData.unrealizedPnL >= 0 ? '+' : ''}${formatCurrency(pnlData.unrealizedPnL)} (${pnlData.unrealizedPercent >= 0 ? '+' : ''}${formatPercent(pnlData.unrealizedPercent)})</span>
+            </div>
+            ` : ''}
             ${isTrimmed ? `
             <div class="position-card__risk-row position-card__realized">
               <span class="position-card__risk-label">Realized P&L</span>
@@ -334,6 +390,85 @@ class PositionsView {
     }
     if (this.elements.empty) {
       this.elements.empty.classList.remove('positions-empty--visible');
+    }
+  }
+
+  async refreshPrices(isAutoRefresh = false) {
+    if (!priceTracker.apiKey) {
+      if (!isAutoRefresh) {
+        showToast('⚠️ Please add your Finnhub API key in Settings first', 'error');
+      }
+      return;
+    }
+
+    const btn = this.elements.refreshPricesBtn;
+
+    // Show loading state on button if manual refresh
+    if (!isAutoRefresh && btn) {
+      btn.disabled = true;
+      btn.classList.add('loading');
+      const svg = btn.querySelector('svg');
+      if (svg) {
+        svg.style.animation = 'spin 1s linear infinite';
+      }
+    }
+
+    try {
+      const results = await priceTracker.refreshAllActivePrices();
+
+      if (results.success.length > 0) {
+        // Only show toast for manual refresh
+        if (!isAutoRefresh) {
+          showToast(`✅ Updated ${results.success.length} stock price${results.success.length > 1 ? 's' : ''}`, 'success');
+        }
+
+        // Render will be triggered by the 'pricesUpdated' event
+        state.emit('pricesUpdated', results);
+      }
+
+      if (results.failed.length > 0) {
+        console.error('Failed to fetch some prices:', results.failed);
+        if (!isAutoRefresh) {
+          showToast(`⚠️ Failed to fetch ${results.failed.length} price${results.failed.length > 1 ? 's' : ''}`, 'warning');
+        }
+      }
+    } catch (error) {
+      console.error('Price refresh error:', error);
+      if (!isAutoRefresh) {
+        showToast('❌ Failed to fetch prices: ' + error.message, 'error');
+      }
+    } finally {
+      // Re-enable button if manual refresh
+      if (!isAutoRefresh && btn) {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        const svg = btn.querySelector('svg');
+        if (svg) {
+          svg.style.animation = '';
+        }
+      }
+    }
+  }
+
+  startAutoRefresh() {
+    // Clear any existing interval
+    this.stopAutoRefresh();
+
+    // Refresh immediately on start
+    if (priceTracker.apiKey) {
+      this.refreshPrices(true);
+    }
+
+    // Set up 1-minute auto-refresh
+    this.autoRefreshInterval = setInterval(() => {
+      this.refreshPrices(true);
+    }, 60000); // 60 seconds
+  }
+
+  stopAutoRefresh() {
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
     }
   }
 }

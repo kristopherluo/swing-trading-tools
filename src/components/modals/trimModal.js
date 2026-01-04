@@ -12,6 +12,7 @@ class TrimModal {
     this.currentTrade = null;
     this.selectedR = 5;
     this.selectedTrimPercent = 100;
+    this.isEditMode = false;
   }
 
   init() {
@@ -43,7 +44,12 @@ class TrimModal {
       totalPnL: document.getElementById('trimTotalPnL'),
       preview: document.getElementById('trimPreview'),
       onlyMoveStopCheckbox: document.getElementById('onlyMoveStopCheckbox'),
-      newStopOptional: document.getElementById('newStopOptional')
+      newStopOptional: document.getElementById('newStopOptional'),
+      editPositionDetailsBtn: document.getElementById('editPositionDetailsBtn'),
+      entryPriceInput: document.getElementById('trimEntryPriceInput'),
+      entryPriceEdit: document.getElementById('trimEntryPriceEdit'),
+      originalStopInput: document.getElementById('trimOriginalStopInput'),
+      originalStopEdit: document.getElementById('trimOriginalStopEdit')
     };
 
     // Cache sections for show/hide (done after modal is in DOM)
@@ -94,6 +100,7 @@ class TrimModal {
     this.elements.exitPrice?.addEventListener('input', () => this.handleManualExitPrice());
     this.elements.confirmBtn?.addEventListener('click', () => this.confirm());
     this.elements.onlyMoveStopCheckbox?.addEventListener('change', () => this.handleOnlyMoveStopToggle());
+    this.elements.editPositionDetailsBtn?.addEventListener('click', () => this.handleEditPositionDetailsToggle());
   }
 
   setDefaultDate() {
@@ -130,7 +137,15 @@ class TrimModal {
     if (this.elements.onlyMoveStopCheckbox) {
       this.elements.onlyMoveStopCheckbox.checked = false;
     }
+
+    // Reset edit mode
+    this.isEditMode = false;
+    if (this.elements.editPositionDetailsBtn) {
+      this.elements.editPositionDetailsBtn.textContent = 'Edit entry/stop';
+    }
+
     this.showAllSections();
+    this.showDisplayValues();
 
     this.elements.modal?.querySelectorAll('[data-r]').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.r) === this.selectedR);
@@ -172,6 +187,10 @@ class TrimModal {
     if (this.elements.stopLoss) this.elements.stopLoss.textContent = formatCurrency(currentStop);
     if (this.elements.riskPerShare) this.elements.riskPerShare.textContent = formatCurrency(riskPerShare);
     if (this.elements.remainingShares) this.elements.remainingShares.textContent = formatNumber(remainingShares);
+
+    // Populate edit input fields
+    if (this.elements.entryPriceInput) this.elements.entryPriceInput.value = trade.entry.toFixed(2);
+    if (this.elements.originalStopInput) this.elements.originalStopInput.value = originalStop.toFixed(2);
 
     // Clear new stop input
     if (this.elements.newStop) this.elements.newStop.value = '';
@@ -375,8 +394,146 @@ class TrimModal {
     }
   }
 
+  showDisplayValues() {
+    // Show display values, hide input fields
+    const displayElements = this.elements.modal?.querySelectorAll('.trim-summary__value--display');
+    displayElements?.forEach(el => el.style.display = '');
+
+    const editElements = this.elements.modal?.querySelectorAll('.trim-summary__value--edit');
+    editElements?.forEach(el => el.style.display = 'none');
+  }
+
+  showEditInputs() {
+    // Hide display values, show input fields
+    const displayElements = this.elements.modal?.querySelectorAll('.trim-summary__value--display');
+    displayElements?.forEach(el => el.style.display = 'none');
+
+    const editElements = this.elements.modal?.querySelectorAll('.trim-summary__value--edit');
+    editElements?.forEach(el => el.style.display = '');
+  }
+
+  handleEditPositionDetailsToggle() {
+    // Toggle edit mode
+    this.isEditMode = !this.isEditMode;
+
+    if (this.isEditMode) {
+      // Edit mode: Show inputs, hide all trim/close sections
+      this.showEditInputs();
+      this.hideClosingFields();
+
+      // Also hide the "new stop" section
+      const newStopSection = this.elements.modal?.querySelector('.trim-section:has(#trimNewStop)');
+      if (newStopSection) {
+        newStopSection.style.display = 'none';
+      }
+
+      // Update buttons
+      if (this.elements.editPositionDetailsBtn) {
+        this.elements.editPositionDetailsBtn.textContent = 'Back to trim/close';
+      }
+      if (this.elements.confirmBtn) {
+        this.elements.confirmBtn.textContent = 'Confirm';
+      }
+    } else {
+      // Normal mode: Show display values, show all sections
+      this.showDisplayValues();
+      this.showAllSections();
+
+      // Show the "new stop" section
+      const newStopSection = this.elements.modal?.querySelector('.trim-section:has(#trimNewStop)');
+      if (newStopSection) {
+        newStopSection.style.display = '';
+      }
+
+      // Update buttons
+      if (this.elements.editPositionDetailsBtn) {
+        this.elements.editPositionDetailsBtn.textContent = 'Edit entry/stop';
+      }
+
+      // Restore button text
+      this.calculatePreview();
+    }
+  }
+
   confirm() {
     if (!this.currentTrade) return;
+
+    // Check if "Edit position details" mode is active
+    if (this.isEditMode) {
+      // Edit position details mode - update entry and original stop
+      const newEntry = parseFloat(this.elements.entryPriceInput?.value);
+      const newOriginalStop = parseFloat(this.elements.originalStopInput?.value);
+
+      if (isNaN(newEntry) || newEntry <= 0) {
+        showToast('⚠️ Please enter a valid entry price', 'error');
+        return;
+      }
+
+      if (isNaN(newOriginalStop) || newOriginalStop <= 0) {
+        showToast('⚠️ Please enter a valid original stop', 'error');
+        return;
+      }
+
+      const oldEntry = this.currentTrade.entry;
+      const oldOriginalStop = this.currentTrade.originalStop ?? this.currentTrade.stop;
+
+      // Build updates object
+      const updates = {
+        entry: newEntry,
+        originalStop: newOriginalStop
+      };
+
+      // If there's existing trim history, recalculate P&L for each trim
+      if (this.currentTrade.trimHistory && this.currentTrade.trimHistory.length > 0) {
+        const updatedTrimHistory = this.currentTrade.trimHistory.map(trim => {
+          // Recalculate P&L based on new entry
+          const newPnl = (trim.exitPrice - newEntry) * trim.shares;
+          // Recalculate R-multiple based on new original stop
+          const newRiskPerShare = newEntry - newOriginalStop;
+          const newRMultiple = newRiskPerShare !== 0 ? (trim.exitPrice - newEntry) / newRiskPerShare : 0;
+
+          return {
+            ...trim,
+            pnl: newPnl,
+            rMultiple: newRMultiple
+          };
+        });
+
+        updates.trimHistory = updatedTrimHistory;
+
+        // Recalculate total realized P&L
+        const newTotalRealizedPnL = updatedTrimHistory.reduce((sum, trim) => sum + trim.pnl, 0);
+        updates.totalRealizedPnL = newTotalRealizedPnL;
+
+        // Update account realized P&L difference
+        const oldTotalPnL = this.currentTrade.totalRealizedPnL || 0;
+        const pnlDifference = newTotalRealizedPnL - oldTotalPnL;
+        state.updateAccount({ realizedPnL: state.account.realizedPnL + pnlDifference });
+
+        // If position is closed, update the final P&L
+        if (this.currentTrade.status === 'closed') {
+          updates.pnl = newTotalRealizedPnL;
+        }
+
+        // Update account size if dynamic accounting is enabled
+        if (state.settings.dynamicAccountEnabled) {
+          const newSize = state.settings.startingAccountSize + state.account.realizedPnL;
+          state.updateAccount({ currentSize: newSize });
+          state.emit('accountSizeChanged', newSize);
+        }
+      }
+
+      // Update the trade
+      state.updateJournalEntry(this.currentTrade.id, updates);
+
+      showToast(
+        `✅ ${this.currentTrade.ticker} position details updated`,
+        'success'
+      );
+
+      this.close();
+      return;
+    }
 
     // Check if "Only move stop" mode is active
     const isOnlyMoveStop = this.elements.onlyMoveStopCheckbox?.checked;

@@ -124,6 +124,22 @@
   color: var(--text-primary);
 }
 
+.positions-risk-bar__value.text-success {
+  color: var(--success) !important;
+}
+
+.positions-risk-bar__value.text-danger {
+  color: var(--danger) !important;
+}
+
+.position-card__risk-value.text-success {
+  color: var(--success) !important;
+}
+
+.position-card__risk-value.text-danger {
+  color: var(--danger) !important;
+}
+
 .positions-risk-bar__value--indicator {
   display: inline-block;
   width: fit-content;

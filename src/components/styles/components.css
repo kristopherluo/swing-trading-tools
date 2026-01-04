@@ -1791,7 +1791,9 @@
 
 /* Trade Summary Card */
 .trim-summary {
+  position: relative;
   padding: var(--space-4);
+  padding-top: calc(var(--space-4) + 36px);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--border-radius);

@@ -670,6 +670,20 @@
         </div>
         <div class="positions-risk-bar__divider"></div>
         <div class="positions-risk-bar__item">
+          <span class="positions-risk-bar__label">Open P&L</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="positions-risk-bar__value positions-risk-bar__value--pnl" id="positionsOpenPnL">$0.00</span>
+            <button class="icon-btn icon-btn--sm" id="refreshPositionsPricesBtn" title="Refresh stock prices">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="positions-risk-bar__divider"></div>
+        <div class="positions-risk-bar__item">
           <span class="positions-risk-bar__label">Risk Level</span>
           <span class="positions-risk-bar__value positions-risk-bar__value--indicator" id="positionsRiskLevel">LOW</span>
         </div>
@@ -1116,6 +1130,33 @@
         </div>
       </div>
 
+      <!-- Price Tracking -->
+      <div class="settings-section">
+        <h3 class="settings-section__title">Price Tracking</h3>
+
+        <div class="input-group">
+          <label class="input-label" for="finnhubApiKey">
+            Finnhub API Key
+            <span class="tooltip">
+              <span class="tooltip__icon">?</span>
+              <span class="tooltip__content">Get a free API key at finnhub.io. Used to fetch current stock prices for unrealized P&L tracking.</span>
+            </span>
+          </label>
+          <input
+            type="text"
+            class="input input--mono"
+            id="finnhubApiKey"
+            placeholder="Paste your Finnhub API key here"
+          >
+          <span class="input-hint">
+            <a href="https://finnhub.io/register" target="_blank" style="color: var(--color-primary);">Sign up for free at finnhub.io</a> - 60 API calls/minute on free tier
+          </span>
+          <span class="input-hint" style="margin-top: var(--space-2); color: var(--text-success);">
+            ✓ Stock prices auto-refresh every 1 minute on the Positions page
+          </span>
+        </div>
+      </div>
+
       <!-- Journal Settings -->
       <div class="settings-section">
         <h3 class="settings-section__title">Journal Settings</h3>
@@ -1220,7 +1261,7 @@
   <div class="modal-overlay" id="trimModalOverlay"></div>
   <div class="modal modal--trim" id="trimModal">
     <div class="modal__header">
-      <h2 class="modal__title">Close Position: <span id="trimModalTicker">TICKER</span></h2>
+      <h2 class="modal__title">Edit Position: <span id="trimModalTicker">TICKER</span></h2>
       <button class="icon-btn" id="closeTrimModalBtn" aria-label="Close">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1232,13 +1273,25 @@
     <div class="modal__content">
       <!-- Trade Summary -->
       <div class="trim-summary">
+        <button class="btn btn--sm btn--ghost" id="editPositionDetailsBtn" style="position: absolute; top: var(--space-3); right: var(--space-3);">
+          Edit entry/stop
+        </button>
+
         <div class="trim-summary__row">
           <span class="trim-summary__label">Entry Price</span>
-          <span class="trim-summary__value" id="trimEntryPrice">$0.00</span>
+          <span class="trim-summary__value trim-summary__value--display" id="trimEntryPrice">$0.00</span>
+          <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimEntryPriceEdit" style="display: none;">
+            <span class="input-prefix">$</span>
+            <input type="text" class="input input--mono" id="trimEntryPriceInput" placeholder="0.00">
+          </div>
         </div>
         <div class="trim-summary__row">
           <span class="trim-summary__label">Original Stop</span>
-          <span class="trim-summary__value" id="trimOriginalStop">$0.00</span>
+          <span class="trim-summary__value trim-summary__value--display" id="trimOriginalStop">$0.00</span>
+          <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimOriginalStopEdit" style="display: none;">
+            <span class="input-prefix">$</span>
+            <input type="text" class="input input--mono" id="trimOriginalStopInput" placeholder="0.00">
+          </div>
         </div>
         <div class="trim-summary__row">
           <span class="trim-summary__label">Current Stop</span>

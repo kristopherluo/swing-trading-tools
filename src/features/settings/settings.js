@@ -7,6 +7,7 @@ import { parseNumber, formatCurrency, formatWithCommas } from '../../core/utils.
 import { showToast } from '../../components/ui/ui.js';
 import { dataManager } from '../../core/dataManager.js';
 import { clearDataModal } from '../../components/modals/clearDataModal.js';
+import { priceTracker } from '../../core/priceTracker.js';
 
 class Settings {
   constructor() {
@@ -34,6 +35,9 @@ class Settings {
       settingsAccountSize: document.getElementById('settingsAccountSize'),
       dynamicAccountToggle: document.getElementById('dynamicAccountToggle'),
       resetAccountBtn: document.getElementById('resetAccountBtn'),
+
+      // Price tracking
+      finnhubApiKey: document.getElementById('finnhubApiKey'),
 
       // Journal settings
       wizardEnabledToggle: document.getElementById('wizardEnabledToggle'),
@@ -149,6 +153,17 @@ class Settings {
     if (this.elements.soundToggle) {
       this.elements.soundToggle.addEventListener('change', (e) => {
         state.updateJournalMetaSettings({ soundEnabled: e.target.checked });
+      });
+    }
+
+    // Finnhub API Key
+    if (this.elements.finnhubApiKey) {
+      this.elements.finnhubApiKey.addEventListener('blur', (e) => {
+        const apiKey = e.target.value.trim();
+        priceTracker.setApiKey(apiKey);
+        if (apiKey) {
+          showToast('✅ API key saved - prices will auto-refresh on Positions page', 'success');
+        }
       });
     }
 
@@ -306,6 +321,12 @@ class Settings {
 
     // Sync preset button active states to match loaded settings
     this.syncPresetButtons();
+
+    // Load API key
+    const apiKey = localStorage.getItem('finnhubApiKey') || '';
+    if (this.elements.finnhubApiKey) {
+      this.elements.finnhubApiKey.value = apiKey;
+    }
 
     // Update header
     this.updateAccountDisplay(state.account.currentSize);

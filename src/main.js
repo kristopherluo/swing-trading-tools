@@ -3,6 +3,7 @@
  */
 
 import { state } from './core/state.js';
+import { priceTracker } from './core/priceTracker.js';
 import { calculator } from './features/calculator/calculator.js';
 import { journal } from './features/journal/journal.js';
 import { settings } from './features/settings/settings.js';
@@ -34,6 +35,9 @@ class App {
 
     // Initialize settings FIRST (loads saved data before theme.init saves defaults)
     settings.init();
+
+    // Initialize price tracker
+    priceTracker.init();
 
     // Initialize theme after settings are loaded (so it doesn't overwrite saved settings)
     theme.init();
