@@ -1,0 +1,9 @@
+# Claude Code local settings
+.claude/settings.local.json
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local

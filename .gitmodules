@@ -1,0 +1,3 @@
+[submodule "swing-trading-tools"]
+	path = swing-trading-tools
+	url = https://github.com/kristopherluo/swing-trading-tools.git
