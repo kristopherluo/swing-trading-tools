@@ -20,6 +20,7 @@ class JournalView {
     this.sortColumn = 'date';
     this.sortDirection = 'desc';
     this.expandedRows = new Set();
+    this.hasAnimated = false;
   }
 
   init() {
@@ -44,7 +45,10 @@ class JournalView {
         this.expandedRows.clear();
       }
 
-      if (data.to === 'journal') this.render();
+      if (data.to === 'journal') {
+        this.hasAnimated = false; // Reset animation flag when entering view
+        this.render();
+      }
     });
   }
 
@@ -54,6 +58,7 @@ class JournalView {
       journalCount: document.getElementById('journalCount'),
 
       // Summary bar
+      dateRange: document.getElementById('journalDateRange'),
       totalPnL: document.getElementById('journalTotalPnL'),
       winRate: document.getElementById('journalWinRate'),
       wins: document.getElementById('journalWins'),
@@ -388,6 +393,9 @@ class JournalView {
     // Clear expanded rows before re-rendering
     this.expandedRows.clear();
 
+    // Reset animation flag to re-animate rows
+    this.hasAnimated = false;
+
     // Close panel and render
     this.closeFilterPanel();
     this.render();
@@ -561,15 +569,14 @@ class JournalView {
 
   render() {
     const trades = this.getFilteredTrades();
-    const allTrades = state.journal.entries;
 
-    // Update count
+    // Update count to show filtered trades
     if (this.elements.journalCount) {
-      this.elements.journalCount.textContent = `${allTrades.length} trade${allTrades.length !== 1 ? 's' : ''}`;
+      this.elements.journalCount.textContent = `${trades.length} trade${trades.length !== 1 ? 's' : ''}`;
     }
 
-    // Render summary bar
-    this.renderSummary();
+    // Render summary bar with filtered trades
+    this.renderSummary(trades);
 
     // Show empty state or table
     if (trades.length === 0) {
@@ -580,10 +587,33 @@ class JournalView {
     }
   }
 
-  renderSummary() {
-    const closedTrades = state.journal.entries.filter(
+  renderSummary(filteredTrades = null) {
+    // Use filtered trades if provided, otherwise use all trades
+    const trades = filteredTrades || state.journal.entries;
+    const closedTrades = trades.filter(
       t => t.status === 'closed' || t.status === 'trimmed'
     );
+
+    // Update date range display
+    if (this.elements.dateRange) {
+      let dateRangeText = 'All time';
+
+      if (this.filters.dateFrom || this.filters.dateTo) {
+        const from = this.filters.dateFrom || 'Beginning';
+        const to = this.filters.dateTo || 'Today';
+
+        // Format dates nicely
+        const formatShortDate = (dateStr) => {
+          if (dateStr === 'Beginning' || dateStr === 'Today') return dateStr;
+          const date = new Date(dateStr);
+          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        };
+
+        dateRangeText = `${formatShortDate(from)} - ${formatShortDate(to)}`;
+      }
+
+      this.elements.dateRange.textContent = dateRangeText;
+    }
 
     // Total P&L
     const totalPnL = closedTrades.reduce((sum, t) => {
@@ -658,7 +688,10 @@ class JournalView {
       }
     });
 
-    this.elements.tableBody.innerHTML = trades.map(trade => {
+    const shouldAnimate = !this.hasAnimated;
+    this.hasAnimated = true;
+
+    this.elements.tableBody.innerHTML = trades.map((trade, index) => {
       const pnl = trade.totalRealizedPnL ?? trade.pnl ?? 0;
       const hasPnL = trade.status === 'closed' || trade.status === 'trimmed';
       const shares = trade.remainingShares ?? trade.shares;
@@ -697,9 +730,21 @@ class JournalView {
       }
 
       const isExpanded = this.expandedRows.has(trade.id);
+      const animationDelay = shouldAnimate ? `animation-delay: ${index * 40}ms;` : '';
+
+      // Determine row background class for closed trades
+      let rowBgClass = '';
+      if (trade.status === 'closed') {
+        const tradePnL = trade.totalRealizedPnL ?? trade.pnl ?? 0;
+        if (tradePnL > 0) {
+          rowBgClass = 'journal-row--closed-winner';
+        } else if (tradePnL < 0) {
+          rowBgClass = 'journal-row--closed-loser';
+        }
+      }
 
       return `
-        <tr class="journal-table__row" data-id="${trade.id}">
+        <tr class="journal-table__row ${shouldAnimate ? 'journal-row--animate' : ''} ${rowBgClass}" data-id="${trade.id}" style="${animationDelay}">
           <td>${formatDate(trade.timestamp)}</td>
           <td><strong>${trade.ticker}</strong></td>
           <td>${formatCurrency(trade.entry)}</td>
@@ -711,7 +756,9 @@ class JournalView {
           <td class="${hasPnL ? (pnlPercent >= 0 ? 'journal-table__pnl--positive' : 'journal-table__pnl--negative') : ''}">
             ${pnlPercent !== null ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%` : '—'}
           </td>
-          <td>${rMultiple !== null ? (Math.abs(rMultiple) < 0.05 ? '<span class="tag tag--breakeven">BE</span>' : `${rMultiple >= 0 ? '+' : ''}${rMultiple.toFixed(1)}R`) : '—'}</td>
+          <td class="${rMultiple !== null ? (rMultiple >= 0 ? 'journal-table__pnl--positive' : 'journal-table__pnl--negative') : ''}">
+            ${rMultiple !== null ? (Math.abs(rMultiple) < 0.05 ? '<span class="tag tag--breakeven">BE</span>' : `${rMultiple >= 0 ? '+' : ''}${rMultiple.toFixed(1)}R`) : '—'}
+          </td>
           <td>
             <span class="journal-table__status journal-table__status--${statusClass}">
               ${statusText}

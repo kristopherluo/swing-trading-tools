@@ -314,13 +314,10 @@ class PositionsView {
 
   render() {
     const positions = this.getFilteredPositions();
-    const allActiveCount = state.journal.entries.filter(
-      e => e.status === 'open' || e.status === 'trimmed'
-    ).length;
 
-    // Update count
+    // Update count to show filtered positions
     if (this.elements.positionsCount) {
-      this.elements.positionsCount.textContent = `${allActiveCount} active position${allActiveCount !== 1 ? 's' : ''}`;
+      this.elements.positionsCount.textContent = `${positions.length} position${positions.length !== 1 ? 's' : ''}`;
     }
 
     // Render risk bar with filtered positions

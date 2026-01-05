@@ -59,6 +59,12 @@
   color: var(--text-muted);
 }
 
+.journal-header__divider {
+  margin: 0 var(--space-2);
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
 .journal-header__filters {
   display: flex;
   gap: var(--space-2);
@@ -90,6 +96,18 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.journal-summary-bar__sublabel {
+  display: block;
+  font-size: 10px;
+  font-weight: var(--font-normal);
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.7;
+  margin-top: 2px;
+  margin-bottom: 4px;
 }
 
 .journal-summary-bar__value {
@@ -213,13 +231,49 @@
   transition: background var(--transition-fast);
 }
 
+.journal-view .journal-table tbody tr.journal-row--animate {
+  animation: rowSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+/* Closed trade row backgrounds */
+.journal-view .journal-table tbody tr.journal-row--closed-winner {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.journal-view .journal-table tbody tr.journal-row--closed-loser {
+  background: rgba(239, 68, 68, 0.15);
+}
+
 .journal-view .journal-table tbody tr:hover {
   background: var(--bg-hover);
+}
+
+/* Preserve row colors on hover with slightly darker shade */
+.journal-view .journal-table tbody tr.journal-row--closed-winner:hover {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.journal-view .journal-table tbody tr.journal-row--closed-loser:hover {
+  background: rgba(239, 68, 68, 0.20);
 }
 
 .journal-view .journal-table tbody tr:last-child td {
   border-bottom: none;
 }
+
+/* Row animations */
+@keyframes rowSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-40px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Animation delays are set via inline styles in JavaScript */
 
 /* Table Status Cell */
 .journal-table__status {
@@ -270,12 +324,14 @@
 }
 
 /* Table P&L Cell */
-.journal-table__pnl--positive {
+.journal-view .journal-table td.journal-table__pnl--positive {
   color: var(--success);
+  font-weight: var(--font-semibold);
 }
 
-.journal-table__pnl--negative {
+.journal-view .journal-table td.journal-table__pnl--negative {
   color: var(--danger);
+  font-weight: var(--font-semibold);
 }
 
 /* Table Actions Cell */
@@ -555,6 +611,11 @@
 
   .journal-view .journal-table {
     min-width: 700px;
+  }
+
+  /* Simpler row animations on mobile - no slide, just fade */
+  .journal-view .journal-table tbody tr.journal-row--animate {
+    animation: fadeIn 0.3s ease-out backwards !important;
   }
 
   /* Simpler animations on mobile */
