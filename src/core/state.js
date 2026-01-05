@@ -270,8 +270,10 @@ class AppState {
           .reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
 
         if (this.state.settings.dynamicAccountEnabled) {
+          // Include cash flow in account calculation
+          const netCashFlow = this.getCashFlowNet();
           this.state.account.currentSize =
-            this.state.settings.startingAccountSize + this.state.account.realizedPnL;
+            this.state.settings.startingAccountSize + this.state.account.realizedPnL + netCashFlow;
         }
       }
     } catch (e) {

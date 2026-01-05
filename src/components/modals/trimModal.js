@@ -560,7 +560,8 @@ class TrimModal {
 
         // Update account size if dynamic accounting is enabled
         if (state.settings.dynamicAccountEnabled) {
-          const newSize = state.settings.startingAccountSize + state.account.realizedPnL;
+          const netCashFlow = state.getCashFlowNet();
+          const newSize = state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
           state.updateAccount({ currentSize: newSize });
           state.emit('accountSizeChanged', newSize);
         }
@@ -670,7 +671,8 @@ class TrimModal {
     state.updateAccount({ realizedPnL: state.account.realizedPnL + pnl });
 
     if (state.settings.dynamicAccountEnabled) {
-      const newSize = state.settings.startingAccountSize + state.account.realizedPnL;
+      const netCashFlow = state.getCashFlowNet();
+      const newSize = state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
       state.updateAccount({ currentSize: newSize });
       state.emit('accountSizeChanged', newSize);
     }

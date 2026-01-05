@@ -100,10 +100,15 @@ class Settings {
       const syncAccountSize = (value) => {
         state.updateSettings({ startingAccountSize: value });
 
-        // Calculate new current size: starting + realized P&L + net cash flow
+        // Calculate new current size: starting + realized P&L + unrealized P&L + net cash flow
         const realizedPnL = state.account.realizedPnL;
         const netCashFlow = state.getCashFlowNet();
-        const newCurrentSize = value + realizedPnL + netCashFlow;
+
+        // Include unrealized P&L from open positions
+        const allOpenTrades = state.journal.entries.filter(e => e.status === 'open' || e.status === 'trimmed');
+        const unrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
+
+        const newCurrentSize = value + realizedPnL + (unrealizedPnL?.totalPnL || 0) + netCashFlow;
 
         state.updateAccount({ currentSize: newCurrentSize });
         this.updateSummary();
