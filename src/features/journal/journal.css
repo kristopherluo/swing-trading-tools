@@ -176,7 +176,7 @@
 .journal-view .journal-table th,
 .journal-view .journal-table td {
   padding: var(--space-3) var(--space-4);
-  text-align: left;
+  text-align: center;
   border-bottom: 1px solid var(--border-subtle);
 }
 
