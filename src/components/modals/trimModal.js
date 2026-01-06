@@ -447,6 +447,11 @@ class TrimModal {
       this.sections.closeDate.style.display = '';
     }
 
+    // Show New Stop section
+    if (this.sections.newStop) {
+      this.sections.newStop.style.display = '';
+    }
+
     // Show shares display
     if (this.sections.sharesDisplay) {
       this.sections.sharesDisplay.style.display = '';

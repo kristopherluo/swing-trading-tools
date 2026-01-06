@@ -60,6 +60,7 @@ class PositionsView {
       openRisk: document.getElementById('positionsOpenRisk'),
       openPnL: document.getElementById('positionsOpenPnL'),
       riskLevel: document.getElementById('positionsRiskLevel'),
+      riskLevelTooltip: document.getElementById('riskLevelTooltip'),
       refreshPricesBtn: document.getElementById('refreshPositionsPricesBtn'),
 
       // Grid
@@ -354,6 +355,9 @@ class PositionsView {
         // Reset any inline styles
         this.elements.riskLevel.style.display = 'inline-block';
       }
+      if (this.elements.riskLevelTooltip) {
+        this.elements.riskLevelTooltip.textContent = 'No open positions - 100% cash';
+      }
       return;
     }
 
@@ -380,12 +384,15 @@ class PositionsView {
     // Determine risk level
     let level = 'LOW';
     let levelClass = '';
+    let tooltip = 'Portfolio risk under 0.5% - conservative position sizing';
     if (riskPercent > 2) {
       level = 'HIGH';
       levelClass = 'risk-high';
+      tooltip = 'Portfolio risk above 2% - significant capital at risk';
     } else if (riskPercent > 0.5) {
       level = 'MEDIUM';
       levelClass = 'risk-medium';
+      tooltip = 'Portfolio risk between 0.5% and 2% - moderate exposure';
     }
 
     if (this.elements.openRisk) {
@@ -404,6 +411,9 @@ class PositionsView {
     if (this.elements.riskLevel) {
       this.elements.riskLevel.textContent = level;
       this.elements.riskLevel.className = `positions-risk-bar__value positions-risk-bar__value--indicator ${levelClass}`;
+    }
+    if (this.elements.riskLevelTooltip) {
+      this.elements.riskLevelTooltip.textContent = tooltip;
     }
   }
 
@@ -536,7 +546,7 @@ class PositionsView {
 
           <div class="position-card__actions">
             <button class="position-card__btn position-card__btn--primary" data-action="close" data-id="${trade.id}">
-              Edit
+              Manage
             </button>
             <button class="position-card__btn position-card__btn--danger" data-action="delete" data-id="${trade.id}">
               Delete

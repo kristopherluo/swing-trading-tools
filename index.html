@@ -346,8 +346,8 @@
         <div class="panel__content">
 
           <div class="results-header">
-            <span class="results-icon">📊</span>
-            <h2 class="results-title">Position Details</h2>
+            <span class="results-icon">🔎</span>
+            <h2 class="results-title">Trade Details</h2>
             <span class="results-ticker" id="resultsTicker">—</span>
           </div>
 
@@ -591,11 +591,11 @@
             </div>
           </div>
 
-          <!-- Active Trades -->
+          <!-- Positions -->
           <div class="card">
             <div class="card__header">
-              <span class="card__icon">📊</span>
-              <h2 class="card__title">Active Trades</h2>
+              <span class="card__icon">💼</span>
+              <h2 class="card__title">Positions</h2>
               <span class="streak-display" id="streakDisplay" style="display: none;">
                 <span class="streak-display__flame">🔥</span>
                 <span class="streak-display__text" id="streakText">0 day streak</span>
@@ -730,11 +730,6 @@
       <!-- Risk Overview Bar -->
       <div class="positions-risk-bar" id="positionsRiskBar">
         <div class="positions-risk-bar__item">
-          <span class="positions-risk-bar__label">Open Risk</span>
-          <span class="positions-risk-bar__value" id="positionsOpenRisk">$0.00</span>
-        </div>
-        <div class="positions-risk-bar__divider"></div>
-        <div class="positions-risk-bar__item">
           <span class="positions-risk-bar__label">Open P&L</span>
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="positions-risk-bar__value positions-risk-bar__value--pnl" id="positionsOpenPnL">$0.00</span>
@@ -749,8 +744,14 @@
         </div>
         <div class="positions-risk-bar__divider"></div>
         <div class="positions-risk-bar__item">
+          <span class="positions-risk-bar__label">Open Risk</span>
+          <span class="positions-risk-bar__value" id="positionsOpenRisk">$0.00</span>
+        </div>
+        <div class="positions-risk-bar__divider"></div>
+        <div class="positions-risk-bar__item positions-risk-bar__item--risk-level">
           <span class="positions-risk-bar__label">Risk Level</span>
           <span class="positions-risk-bar__value positions-risk-bar__value--indicator" id="positionsRiskLevel">LOW</span>
+          <div class="risk-level-tooltip" id="riskLevelTooltip">Portfolio risk under 0.5% - conservative position sizing</div>
         </div>
       </div>
 
@@ -1552,8 +1553,8 @@
 
     <div class="modal__content">
       <!-- Trade Summary -->
-      <div class="trim-summary">
-        <button class="btn btn--sm btn--ghost" id="editPositionDetailsBtn" style="position: absolute; top: var(--space-3); right: var(--space-3);">
+      <div class="trim-summary" style="padding-top: 8px; padding-bottom: 40px;">
+        <button class="btn btn--sm btn--ghost" id="editPositionDetailsBtn" style="position: absolute; bottom: var(--space-3); right: var(--space-3); padding-left: var(--space-2); padding-right: var(--space-2);">
           Edit trade details
         </button>
 
@@ -1606,19 +1607,21 @@
         </div>
 
         <!-- Exit Price -->
-        <div class="input-group input-group--inline">
-          <label class="input-label" for="trimExitPrice">Exit Price</label>
-          <div class="input-wrapper input-wrapper--prefix input-wrapper--sm">
-            <span class="input-prefix">$</span>
-            <input type="text" class="input input--mono" id="trimExitPrice" placeholder="0.00">
+        <div class="input-group input-group--inline" style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 200px;">
+            <label class="input-label" for="trimExitPrice" style="margin: 0;">Exit Price</label>
+            <div class="input-wrapper input-wrapper--prefix input-wrapper--sm">
+              <span class="input-prefix">$</span>
+              <input type="text" class="input input--mono" id="trimExitPrice" placeholder="0.00">
+            </div>
+            <span class="trim-r-display" id="trimRDisplay">(5R)</span>
           </div>
-          <span class="trim-r-display" id="trimRDisplay">(5R)</span>
+          <label class="checkbox-label" style="margin: 0;">
+            <input type="checkbox" id="onlyChangeTargetCheckbox">
+            <span class="checkbox-box"></span>
+            <span class="checkbox-text">Only change target</span>
+          </label>
         </div>
-        <label class="checkbox-label" style="margin-top: var(--space-2);">
-          <input type="checkbox" id="onlyChangeTargetCheckbox">
-          <span class="checkbox-box"></span>
-          <span class="checkbox-text">Only change target</span>
-        </label>
       </div>
 
       <!-- Trim Percentage Selection -->
@@ -1987,7 +1990,7 @@
       <div class="footer__brand">
         <a href="#" class="footer__logo">StonkStats</a>
         <span class="footer__divider">·</span>
-        <span class="footer__tagline">Smart position sizing for safer trading</span>
+        <span class="footer__tagline">Study every trade you make</span>
       </div>
 
       <div class="footer__social">

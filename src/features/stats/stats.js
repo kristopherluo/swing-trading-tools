@@ -365,7 +365,7 @@ class Stats {
 
     const startingAccount = settings.startingAccountSize;
     const currentAccount = account.currentSize + (unrealizedPnL?.totalPnL || 0);
-    const netCashFlow = account.currentSize - startingAccount - allTimePnL;
+    const netCashFlow = state.getCashFlowNet();
 
     const tradingGrowth = startingAccount > 0
       ? ((allTimePnL + (unrealizedPnL?.totalPnL || 0)) / startingAccount) * 100
@@ -450,7 +450,7 @@ class Stats {
     if (this.elements.winLoss) {
       const winText = `${s.wins} win${s.wins !== 1 ? 's' : ''}`;
       const lossText = `${s.losses} loss${s.losses !== 1 ? 'es' : ''}`;
-      this.elements.winLoss.textContent = `${winText} · ${lossText}`;
+      this.elements.winLoss.innerHTML = `<span class="text-success">${winText}</span> · <span class="text-danger">${lossText}</span>`;
     }
 
     // Sharpe Ratio
@@ -467,7 +467,8 @@ class Stats {
     if (this.elements.accountChange) {
       const change = s.currentAccount - s.startingAccount;
       const isPositive = change >= 0;
-      this.elements.accountChange.textContent = `${isPositive ? '+' : '-'}$${this.formatNumber(change)} from start`;
+      const colorClass = change > 0 ? 'text-success' : (change < 0 ? 'text-danger' : '');
+      this.elements.accountChange.innerHTML = `<span class="${colorClass}">${isPositive ? '+' : ''}$${this.formatNumber(change)}</span> from start`;
     }
 
     // Trading Growth
@@ -489,7 +490,9 @@ class Stats {
     // Net Cash Flow
     if (this.elements.cashFlow) {
       const isPositive = s.netCashFlow >= 0;
+      const colorClass = s.netCashFlow > 0 ? 'text-success' : (s.netCashFlow < 0 ? 'text-danger' : '');
       this.elements.cashFlow.textContent = `${isPositive ? '+' : ''}$${this.formatNumber(s.netCashFlow)}`;
+      this.elements.cashFlow.className = `stat-card__value ${colorClass}`;
     }
 
     // Chart value (current account)
