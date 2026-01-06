@@ -8,7 +8,6 @@ import { showToast } from '../../components/ui/ui.js';
 import { dataManager } from '../../core/dataManager.js';
 import { clearDataModal } from '../../components/modals/clearDataModal.js';
 import { priceTracker } from '../../core/priceTracker.js';
-import { historicalPrices } from '../../core/historicalPrices.js';
 
 class Settings {
   constructor() {
@@ -74,7 +73,6 @@ class Settings {
 
       // Price tracking
       finnhubApiKey: document.getElementById('finnhubApiKey'),
-      alphaVantageApiKey: document.getElementById('alphaVantageApiKey'),
       twelveDataApiKey: document.getElementById('twelveDataApiKey'),
 
       // Journal settings
@@ -238,37 +236,12 @@ class Settings {
       });
     }
 
-    // Alpha Vantage API Key
-    if (this.elements.alphaVantageApiKey) {
-      const saveAlphaVantageKey = (apiKey) => {
-        localStorage.setItem('alphaVantageApiKey', apiKey);
-        historicalPrices.setApiKey(apiKey);
-        if (apiKey) {
-          showToast('✅ Alpha Vantage API key saved - historical charts and equity curve now available', 'success');
-        }
-      };
-
-      this.elements.alphaVantageApiKey.addEventListener('blur', (e) => {
-        const apiKey = e.target.value.trim();
-        saveAlphaVantageKey(apiKey);
-      });
-
-      this.elements.alphaVantageApiKey.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const apiKey = e.target.value.trim();
-          saveAlphaVantageKey(apiKey);
-          e.target.blur();
-        }
-      });
-    }
-
     // Twelve Data API Key
     if (this.elements.twelveDataApiKey) {
       const saveTwelveDataKey = (apiKey) => {
         localStorage.setItem('twelveDataApiKey', apiKey);
         if (apiKey) {
-          showToast('✅ Twelve Data API key saved - 800 calls/day for historical charts!', 'success');
+          showToast('✅ Twelve Data API key saved - 800 calls/day for charts & company summaries!', 'success');
         }
       };
 
@@ -476,15 +449,6 @@ class Settings {
     const finnhubKey = localStorage.getItem('finnhubApiKey') || '';
     if (this.elements.finnhubApiKey) {
       this.elements.finnhubApiKey.value = finnhubKey;
-    }
-
-    const alphaVantageKey = localStorage.getItem('alphaVantageApiKey') || '';
-    if (this.elements.alphaVantageApiKey) {
-      this.elements.alphaVantageApiKey.value = alphaVantageKey;
-    }
-    // Set API key for historical prices
-    if (alphaVantageKey) {
-      historicalPrices.setApiKey(alphaVantageKey);
     }
 
     const twelveDataKey = localStorage.getItem('twelveDataApiKey') || '';

@@ -159,7 +159,6 @@ export const priceTracker = {
 
   async fetchCompanyProfile(ticker) {
     if (!this.apiKey) {
-      console.log('[Company Profile] No API key configured');
       return null; // Silently return null if no API key
     }
 
@@ -170,23 +169,18 @@ export const priceTracker = {
     }
 
     try {
-      console.log(`[Company Profile] Fetching profile for ${ticker}...`);
       const response = await fetch(
         `https://finnhub.io/api/v1/stock/profile2?symbol=${ticker.toUpperCase()}&token=${this.apiKey}`
       );
 
       if (!response.ok) {
-        console.log(`[Company Profile] API request failed: ${response.status}`);
         return null;
       }
 
       const data = await response.json();
-      console.log(`[Company Profile] Full Finnhub response for ${ticker}:`, data);
-      console.log(`[Company Profile] Available fields:`, Object.keys(data));
 
       // Finnhub returns empty object if ticker not found
       if (!data || Object.keys(data).length === 0 || !data.name) {
-        console.log(`[Company Profile] No data found for ${ticker}`);
         return null;
       }
 
@@ -204,8 +198,6 @@ export const priceTracker = {
         description: data.description || data.longBusinessSummary || ''
       };
 
-      console.log(`[Company Profile] ✅ Successfully fetched profile for ${ticker}:`, profile);
-
       // Cache the data
       this.saveCompanyDataToCache(ticker, profile);
 
@@ -217,52 +209,47 @@ export const priceTracker = {
   },
 
   /**
-   * Fetch company summary/description from Alpha Vantage API
+   * Fetch company summary/description from Twelve Data API
    * Returns: { summary: string, name: string, sector: string, industry: string }
    */
   async fetchCompanySummary(ticker) {
-    const apiKey = localStorage.getItem('alphaVantageApiKey') || 'demo';
-
-    try {
-      console.log(`[Company Summary] Fetching overview for ${ticker}...`);
-      const response = await fetch(
-        `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${ticker.toUpperCase()}&apikey=${apiKey}`
-      );
-
-      if (!response.ok) {
-        console.log(`[Company Summary] API request failed: ${response.status}`);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log(`[Company Summary] Response for ${ticker}:`, data);
-
-      // Check for API errors
-      if (data['Error Message'] || data['Note'] || data['Information']) {
-        console.log(`[Company Summary] API error or rate limit for ${ticker}`);
-        return null;
-      }
-
-      // Alpha Vantage returns empty object if ticker not found
-      if (!data || Object.keys(data).length === 0 || !data.Symbol) {
-        console.log(`[Company Summary] No data found for ${ticker}`);
-        return null;
-      }
-
-      const overview = {
-        ticker: ticker.toUpperCase(),
-        name: data.Name || '',
-        sector: data.Sector || '',
-        industry: data.Industry || '',
-        summary: data.Description || ''
-      };
-
-      console.log(`[Company Summary] ✅ Successfully fetched overview for ${ticker}`);
-      return overview;
-    } catch (error) {
-      console.error(`[Company Summary] ❌ Failed to fetch overview for ${ticker}:`, error);
-      return null;
+    const twelveDataKey = localStorage.getItem('twelveDataApiKey');
+    if (!twelveDataKey) {
+      throw new Error('Twelve Data API key not configured. Add it in Settings to fetch company summaries.');
     }
+
+    console.log(`[Company Summary] Using Twelve Data for ${ticker}`);
+    return await this.fetchCompanySummaryFromTwelveData(ticker, twelveDataKey);
+  },
+
+  async fetchCompanySummaryFromTwelveData(ticker, apiKey) {
+    const url = `https://api.twelvedata.com/profile?symbol=${ticker.toUpperCase()}&apikey=${apiKey}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch company profile (${response.status})`);
+    }
+
+    const data = await response.json();
+
+    // Check for errors
+    if (data.status === 'error') {
+      throw new Error(data.message || 'Twelve Data API error');
+    }
+
+    if (!data.name) {
+      throw new Error('No company profile data available');
+    }
+
+    // Twelve Data returns: name, sector, industry, description, etc.
+    return {
+      ticker: ticker.toUpperCase(),
+      name: data.name || '',
+      sector: data.sector || '',
+      industry: data.industry || '',
+      summary: data.description || ''
+    };
   },
 
   async fetchPrices(tickers) {
@@ -377,7 +364,7 @@ export const priceTracker = {
   },
 
   /**
-   * Fetch historical daily candle data for a stock using Alpha Vantage API
+   * Fetch historical daily candle data for a stock using Twelve Data API
    * Fetches 1 year before entry + 3 months after (or today, whichever is sooner)
    * @param {string} ticker - Stock ticker symbol
    * @param {Date} entryDate - Entry date
@@ -386,20 +373,13 @@ export const priceTracker = {
    * @returns {Promise<Array>} Array of candle data {time, open, high, low, close}
    */
   async fetchHistoricalCandles(ticker, entryDate, daysBack = 365, daysForward = 90) {
-    // Try Twelve Data first (800 calls/day free tier!)
     const twelveDataKey = localStorage.getItem('twelveDataApiKey');
-    if (twelveDataKey) {
-      try {
-        console.log(`Using Twelve Data for chart data (800 calls/day free tier)`);
-        return await this.fetchHistoricalCandlesFromTwelveData(ticker, entryDate, daysBack, twelveDataKey);
-      } catch (error) {
-        console.error('Twelve Data fetch failed, trying Alpha Vantage:', error);
-      }
+    if (!twelveDataKey) {
+      throw new Error('Twelve Data API key not configured. Add it in Settings to view charts.');
     }
 
-    // Fallback to Alpha Vantage
-    console.log('Using Alpha Vantage for chart data (25 calls/day limit)');
-    return await this.fetchHistoricalCandlesFromAlphaVantage(ticker, entryDate, daysBack, daysForward);
+    console.log(`Using Twelve Data for chart data (800 calls/day free tier)`);
+    return await this.fetchHistoricalCandlesFromTwelveData(ticker, entryDate, daysBack, twelveDataKey);
   },
 
   async fetchHistoricalCandlesFromTwelveData(ticker, entryDate, daysBack, apiKey) {
@@ -411,8 +391,6 @@ export const priceTracker = {
     // We'll request enough days to cover our range
     const outputsize = Math.min(daysBack + 90, 5000);
 
-    console.log(`[Twelve Data] Fetching ${outputsize} days of data for ${ticker}`);
-
     const url = `https://api.twelvedata.com/time_series?symbol=${ticker.toUpperCase()}&interval=1day&outputsize=${outputsize}&apikey=${apiKey}&format=JSON`;
 
     const response = await fetch(url);
@@ -422,8 +400,6 @@ export const priceTracker = {
     }
 
     const data = await response.json();
-
-    console.log('[Twelve Data] API Response:', data);
 
     // Check for errors
     if (data.status === 'error') {
@@ -450,153 +426,6 @@ export const priceTracker = {
       })
       .sort((a, b) => a.time - b.time); // Sort oldest to newest
 
-    console.log(`[Twelve Data] Fetched ${candles.length} candles`);
     return candles;
-  },
-
-  async fetchHistoricalCandlesFromFinnhub(ticker, entryDate, daysBack = 365, daysForward = 90) {
-    const entryDateObj = new Date(entryDate);
-    const fromDate = new Date(entryDateObj);
-    fromDate.setDate(fromDate.getDate() - daysBack);
-
-    const toDate = new Date(entryDateObj);
-    toDate.setDate(toDate.getDate() + daysForward);
-
-    // Don't fetch future data beyond today
-    const today = new Date();
-    if (toDate > today) {
-      toDate.setTime(today.getTime());
-    }
-
-    const fromTimestamp = Math.floor(fromDate.getTime() / 1000);
-    const toTimestamp = Math.floor(toDate.getTime() / 1000);
-
-    console.log(`[Finnhub] Fetching chart data: ${ticker} from ${fromDate.toDateString()} to ${toDate.toDateString()}`);
-
-    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker.toUpperCase()}&resolution=D&from=${fromTimestamp}&to=${toTimestamp}&token=${this.apiKey}`;
-
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch data (${response.status})`);
-    }
-
-    const data = await response.json();
-
-    // Finnhub returns {s: "ok", t: [timestamps], o: [opens], h: [highs], l: [lows], c: [closes], v: [volumes]}
-    if (data.s !== 'ok' || !data.t || data.t.length === 0) {
-      throw new Error('No data available for this ticker from Finnhub');
-    }
-
-    // Convert Finnhub format to our candle format
-    const candles = data.t.map((timestamp, index) => ({
-      time: timestamp,
-      open: data.o[index],
-      high: data.h[index],
-      low: data.l[index],
-      close: data.c[index],
-      volume: data.v[index]
-    }));
-
-    console.log(`[Finnhub] Fetched ${candles.length} candles`);
-    return candles;
-  },
-
-  async fetchHistoricalCandlesFromAlphaVantage(ticker, entryDate, daysBack = 365, daysForward = 90) {
-    // Use Alpha Vantage API key if available, otherwise use demo key (limited to IBM, AAPL, MSFT, etc.)
-    const apiKey = localStorage.getItem('alphaVantageApiKey') || 'demo';
-
-    console.log('[Alpha Vantage] Fetching chart data (WARNING: 25 calls/day limit)');
-
-    try {
-      // Use compact outputsize (100 most recent data points = ~4-5 months)
-      // Note: outputsize=full is a premium feature
-      const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker.toUpperCase()}&apikey=${apiKey}&outputsize=compact`;
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      console.log('Alpha Vantage API Response:', data);
-
-      // Check for API errors
-      if (data['Error Message']) {
-        throw new Error('Invalid ticker symbol');
-      }
-
-      if (data['Note']) {
-        throw new Error('API rate limit reached. Please add your own Alpha Vantage API key in Settings (free at alphavantage.co)');
-      }
-
-      if (data['Information']) {
-        throw new Error('API rate limit: ' + data['Information']);
-      }
-
-      if (!data['Time Series (Daily)']) {
-        console.error('Unexpected API response format:', Object.keys(data));
-        throw new Error('No historical data available. API response: ' + Object.keys(data).join(', '));
-      }
-
-      const timeSeries = data['Time Series (Daily)'];
-      const candles = [];
-
-      // Calculate date range: 1 year before entry to 3 months after (or today)
-      const entryDateObj = new Date(entryDate);
-      const fromDate = new Date(entryDateObj);
-      fromDate.setDate(fromDate.getDate() - daysBack);
-
-      const toDate = new Date(entryDateObj);
-      toDate.setDate(toDate.getDate() + daysForward);
-
-      // Don't fetch future data beyond today
-      const today = new Date();
-      if (toDate > today) {
-        toDate.setTime(today.getTime());
-      }
-
-      console.log('Fetching chart data:', {
-        ticker,
-        entryDate: entryDateObj.toISOString(),
-        fromDate: fromDate.toISOString(),
-        toDate: toDate.toISOString(),
-        availableDates: Object.keys(timeSeries).length
-      });
-
-      // Parse and filter data - convert all to UTC for comparison
-      for (const [dateStr, values] of Object.entries(timeSeries)) {
-        const date = new Date(dateStr + 'T00:00:00Z');
-
-        // Only include dates in our range (compare as UTC)
-        if (date >= fromDate && date <= toDate) {
-          const timestamp = Math.floor(date.getTime() / 1000);
-          candles.push({
-            time: timestamp,
-            open: parseFloat(values['1. open']),
-            high: parseFloat(values['2. high']),
-            low: parseFloat(values['3. low']),
-            close: parseFloat(values['4. close']),
-            volume: parseFloat(values['5. volume'])
-          });
-        }
-      }
-
-      // Sort by time (oldest to newest)
-      candles.sort((a, b) => a.time - b.time);
-
-      console.log('Filtered candles:', candles.length);
-
-      if (candles.length === 0) {
-        throw new Error(`No data found between ${fromDate.toISOString().split('T')[0]} and ${toDate.toISOString().split('T')[0]}`);
-      }
-
-      return candles;
-    } catch (error) {
-      console.error('Failed to fetch historical candles:', error);
-      throw error;
-    }
   }
 };
