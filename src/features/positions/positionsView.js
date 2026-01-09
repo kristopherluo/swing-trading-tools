@@ -5,6 +5,7 @@
 import { state } from '../../core/state.js';
 import { formatCurrency, formatPercent } from '../../core/utils.js';
 import { trimModal } from '../../components/modals/trimModal.js';
+import { wizard } from '../../components/modals/wizard.js';
 import { viewManager } from '../../components/ui/viewManager.js';
 import { priceTracker } from '../../core/priceTracker.js';
 import { showToast } from '../../components/ui/ui.js';
@@ -23,6 +24,14 @@ class PositionsView {
   init() {
     this.cacheElements();
     this.bindEvents();
+
+    // Initialize all type checkboxes to be checked (matching "All Types" default state)
+    if (this.elements.typeCheckboxes) {
+      this.elements.typeCheckboxes.forEach(checkbox => {
+        checkbox.checked = true;
+      });
+    }
+
     this.render();
 
     // Listen for journal changes
@@ -62,6 +71,7 @@ class PositionsView {
       riskLevel: document.getElementById('positionsRiskLevel'),
       riskLevelTooltip: document.getElementById('riskLevelTooltip'),
       refreshPricesBtn: document.getElementById('refreshPositionsPricesBtn'),
+      newPositionBtn: document.getElementById('positionsNewBtn'),
 
       // Grid
       grid: document.getElementById('positionsGrid'),
@@ -70,7 +80,7 @@ class PositionsView {
       empty: document.getElementById('positionsEmpty'),
       emptyTitle: document.getElementById('positionsEmptyTitle'),
       emptyText: document.getElementById('positionsEmptyText'),
-      goToDashboard: document.getElementById('positionsGoToDashboard'),
+      openWizardBtn: document.getElementById('positionsNewBtn2'),
 
       // Filter dropdown
       filterBtn: document.getElementById('positionsFilterBtn'),
@@ -87,10 +97,10 @@ class PositionsView {
   }
 
   bindEvents() {
-    // Go to dashboard button
-    if (this.elements.goToDashboard) {
-      this.elements.goToDashboard.addEventListener('click', () => {
-        viewManager.navigateTo('dashboard');
+    // Open wizard button
+    if (this.elements.openWizardBtn) {
+      this.elements.openWizardBtn.addEventListener('click', () => {
+        wizard.open();
       });
     }
 
@@ -98,6 +108,13 @@ class PositionsView {
     if (this.elements.refreshPricesBtn) {
       this.elements.refreshPricesBtn.addEventListener('click', async () => {
         await this.refreshPrices();
+      });
+    }
+
+    // New Position button - opens wizard
+    if (this.elements.newPositionBtn) {
+      this.elements.newPositionBtn.addEventListener('click', () => {
+        wizard.open();
       });
     }
 
@@ -318,7 +335,7 @@ class PositionsView {
 
     // Update count to show filtered positions
     if (this.elements.positionsCount) {
-      this.elements.positionsCount.textContent = `Active: ${positions.length}`;
+      this.elements.positionsCount.textContent = positions.length;
     }
 
     // Render risk bar with filtered positions
@@ -434,21 +451,12 @@ class PositionsView {
       const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
       const riskPercent = (netRisk / state.account.currentSize) * 100;
 
-      // Check if trade is "free rolled" - realized profit covers remaining risk
-      const isFreeRoll = isTrimmed && realizedPnL >= (grossRisk - 0.01);
-
       // Get price data from tracker
       const pnlData = priceTracker.calculateUnrealizedPnL(trade);
 
       // Determine status
       let statusClass = trade.status;
-      let statusText = 'Open';
-      if (isFreeRoll) {
-        statusClass = 'freeroll';
-        statusText = 'Free Rolled';
-      } else if (isTrimmed) {
-        statusText = 'Trimmed';
-      }
+      let statusText = isTrimmed ? 'Trimmed' : 'Open';
 
       // Get trade metadata
       const setupType = trade.thesis?.setupType;
@@ -588,9 +596,9 @@ class PositionsView {
           this.filters.status === 'open' ? 'You don\'t have any open positions.' :
           'No positions match this filter.';
       }
-      // Hide the "Go to Dashboard" button when they already have positions
-      if (this.elements.goToDashboard) {
-        this.elements.goToDashboard.style.display = 'none';
+      // Hide the wizard button when they already have positions
+      if (this.elements.openWizardBtn) {
+        this.elements.openWizardBtn.style.display = 'none';
       }
     } else {
       // User has no positions at all
@@ -598,11 +606,11 @@ class PositionsView {
         this.elements.emptyTitle.textContent = 'No Active Positions';
       }
       if (this.elements.emptyText) {
-        this.elements.emptyText.textContent = 'You\'re currently all cash. Head to the Dashboard to log a new trade.';
+        this.elements.emptyText.textContent = 'You\'re currently all cash. Click below to log a new trade.';
       }
-      // Show the "Go to Dashboard" button
-      if (this.elements.goToDashboard) {
-        this.elements.goToDashboard.style.display = '';
+      // Show the wizard button
+      if (this.elements.openWizardBtn) {
+        this.elements.openWizardBtn.style.display = '';
       }
     }
 

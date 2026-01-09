@@ -1568,7 +1568,8 @@ input[type="date"].input:focus {
   width: 400px;
   max-width: 90vw;
   background: var(--bg-surface);
-  border-left: 1px solid var(--border-subtle);
+  border-left: 1px solid rgba(96, 165, 250, 0.3);
+  box-shadow: -4px 0 20px rgba(96, 165, 250, 0.15);
   transform: translateX(100%);
   opacity: 0;
   visibility: hidden;
@@ -1591,14 +1592,20 @@ input[type="date"].input:focus {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid rgba(96, 165, 250, 0.2);
 }
 
 .settings-panel__title {
   font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  letter-spacing: -0.01em;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.8),
+    0 0 20px rgba(96, 165, 250, 0.5),
+    0 0 30px rgba(96, 165, 250, 0.3);
 }
 
 .settings-panel__content {
@@ -1609,19 +1616,25 @@ input[type="date"].input:focus {
 
 .settings-panel__footer {
   padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid rgba(96, 165, 250, 0.2);
   text-align: center;
 }
 
 .settings-panel__autosave {
   font-size: var(--text-xs);
-  color: var(--text-muted);
+  color: #a0aec0;
+  text-shadow: 0 0 4px rgba(160, 174, 192, 0.4);
+}
+
+.settings-panel .input-label {
+  color: #cbd5e0;
+  text-shadow: 0 0 2px rgba(203, 213, 224, 0.3);
 }
 
 .settings-section {
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid rgba(96, 165, 250, 0.15);
 }
 
 .settings-section:last-child {
@@ -1641,10 +1654,13 @@ input[type="date"].input:focus {
 
 .settings-section__title {
   font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-bold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  color: #a78bfa;
+  text-shadow:
+    0 0 6px rgba(167, 139, 250, 0.5),
+    0 0 12px rgba(167, 139, 250, 0.2);
   margin-bottom: var(--space-4);
 }
 
@@ -1667,8 +1683,9 @@ input[type="date"].input:focus {
   width: 44px;
   height: 24px;
   background: var(--bg-hover);
+  border: 1px solid rgba(96, 165, 250, 0.2);
   border-radius: 12px;
-  transition: background var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
 .toggle-switch__slider::after {
@@ -1684,12 +1701,15 @@ input[type="date"].input:focus {
 }
 
 .toggle-switch input:checked + .toggle-switch__slider {
-  background: var(--primary);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.4), inset 0 0 8px rgba(96, 165, 250, 0.2);
 }
 
 .toggle-switch input:checked + .toggle-switch__slider::after {
   left: 22px;
-  background: white;
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
 }
 
 .toggle-switch__label {
@@ -1716,7 +1736,7 @@ input[type="date"].input:focus {
   width: 20px;
   height: 20px;
   background: var(--bg-elevated);
-  border: 2px solid var(--border-subtle);
+  border: 2px solid rgba(96, 165, 250, 0.3);
   border-radius: var(--border-radius-sm);
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -1736,12 +1756,15 @@ input[type="date"].input:focus {
 }
 
 .checkbox-label input:checked + .checkbox-box {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: rgba(96, 165, 250, 0.15);
+  border-color: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.6), inset 0 0 8px rgba(96, 165, 250, 0.2);
 }
 
 .checkbox-label input:checked + .checkbox-box::after {
   transform: rotate(45deg) scale(1);
+  border-color: #60a5fa;
+  filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.8));
 }
 
 .checkbox-label:hover .checkbox-box {
@@ -3036,11 +3059,6 @@ input[type="date"].input:focus {
   background: var(--success-muted);
 }
 
-.status-badge--freeroll {
-  color: var(--primary);
-  background: var(--primary-muted);
-}
-
 .status-badge::before {
   content: '';
   width: 6px;
@@ -3435,6 +3453,28 @@ input[type="date"].input:focus {
   max-width: 500px;
   max-height: 90vh;
   overflow: hidden;
+  border-radius: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+
+.modal--wizard.open {
+  /* Uses default modal open styles */
+}
+
+/* Wizard Modal Header */
+.modal--wizard .modal__header {
+  /* Uses default modal header styles */
+}
+
+.modal--wizard .modal__title {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.5));
 }
 
 /* Wizard Progress Bar */
@@ -3443,8 +3483,12 @@ input[type="date"].input:focus {
   align-items: center;
   justify-content: center;
   padding: var(--space-4) var(--space-6);
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-default);
+  background:
+    linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow:
+    0 1px 0 rgba(59, 130, 246, 0.15),
+    0 2px 8px rgba(59, 130, 246, 0.1);
 }
 
 .wizard-progress__step {
@@ -3458,8 +3502,8 @@ input[type="date"].input:focus {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 2px solid var(--border-default);
+  background: rgba(30, 41, 59, 0.8);
+  border: 2px solid rgba(148, 163, 184, 0.3);
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-weight: 600;
@@ -3471,26 +3515,41 @@ input[type="date"].input:focus {
 
 .wizard-progress__label {
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
   color: var(--text-muted);
+  letter-spacing: 0.02em;
   transition: color 0.3s ease;
 }
 
 .wizard-progress__step.active .wizard-progress__number {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: white;
-  box-shadow: 0 0 0 4px var(--primary-muted);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.3) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border-color: rgba(59, 130, 246, 0.8);
+  color: var(--primary);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.5),
+    0 0 16px rgba(59, 130, 246, 0.3),
+    0 0 0 4px rgba(59, 130, 246, 0.1);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.4);
 }
 
 .wizard-progress__step.active .wizard-progress__label {
   color: var(--primary);
-  font-weight: 500;
+  font-weight: 600;
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
 }
 
 .wizard-progress__step.completed .wizard-progress__number {
-  background: var(--success);
-  border-color: var(--success);
-  color: white;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.3) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 100%);
+  border-color: rgba(34, 197, 94, 0.7);
+  color: var(--success);
+  box-shadow:
+    0 0 8px rgba(34, 197, 94, 0.4),
+    0 0 16px rgba(34, 197, 94, 0.2);
+  text-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
 }
 
 .wizard-progress__step.completed .wizard-progress__number::before {
@@ -3517,6 +3576,9 @@ input[type="date"].input:focus {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 0% 100%, rgba(139, 92, 246, 0.02) 0%, transparent 40%);
 }
 
 .wizard-step {
@@ -3549,19 +3611,33 @@ input[type="date"].input:focus {
 .wizard-step__header {
   text-align: center;
   margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--border-radius);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .wizard-step__title {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: var(--text-xl);
   font-weight: 600;
-  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  color: var(--primary);
+  text-shadow:
+    0 0 8px rgba(96, 165, 250, 0.6),
+    0 0 16px rgba(96, 165, 250, 0.3);
   margin-bottom: var(--space-1);
 }
 
 .wizard-step__subtitle {
   font-size: var(--text-sm);
   color: var(--text-muted);
+  text-shadow: 0 0 4px rgba(148, 163, 184, 0.3);
 }
 
 .wizard-step__content {
@@ -3570,13 +3646,181 @@ input[type="date"].input:focus {
   gap: var(--space-4);
 }
 
+/* Reduce gap after input-row in wizard */
+.modal--wizard .input-row + .input-group {
+  margin-top: calc(var(--space-4) * -0.5);
+}
+
+/* Wizard Input Rows - Enhanced Container Glow */
+.modal--wizard .input-row {
+  padding: var(--space-3);
+  border-radius: var(--border-radius);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.04) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.3) 0%, rgba(15, 23, 42, 0.5) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.03);
+}
+
+/* Wizard Input Groups - Enhanced Glow */
+.modal--wizard .input-group {
+  position: relative;
+}
+
+.modal--wizard .input-group:has(.input:focus),
+.modal--wizard .input-group:has(.input--mono:focus) {
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.2));
+}
+
+/* Wizard Input Fields - Enhanced Glow */
+.modal--wizard .input,
+.modal--wizard .input--mono {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-color: rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease;
+  box-shadow:
+    0 0 4px rgba(59, 130, 246, 0.1),
+    inset 0 1px 1px rgba(255, 255, 255, 0.03);
+}
+
+.modal--wizard .input:focus,
+.modal--wizard .input--mono:focus {
+  border-color: rgba(59, 130, 246, 0.8);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
+  box-shadow:
+    0 0 12px rgba(59, 130, 246, 0.4),
+    0 0 24px rgba(59, 130, 246, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
+/* Wizard Labels */
+.modal--wizard .input-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-shadow: 0 0 4px rgba(148, 163, 184, 0.2);
+}
+
+/* Wizard Input Prefixes */
+.modal--wizard .input-prefix {
+  color: var(--primary);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
+/* Wizard Stepper Buttons */
+.modal--wizard .input-stepper__btn {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-left: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--primary);
+  transition: all 0.2s ease;
+}
+
+.modal--wizard .input-stepper__btn:hover {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
+  border-left-color: rgba(59, 130, 246, 0.5);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.3),
+    inset 0 0 8px rgba(59, 130, 246, 0.15);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.5);
+}
+
+/* Wizard Tooltips */
+.modal--wizard .tooltip__icon {
+  color: var(--primary);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
+/* Wizard Date Input */
+.modal--wizard input[type="date"] {
+  color-scheme: dark;
+  filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.3));
+}
+
+.modal--wizard input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6) sepia(1) saturate(3) hue-rotate(190deg) brightness(1.2) drop-shadow(0 0 4px rgba(59, 130, 246, 0.5));
+  cursor: pointer;
+}
+
+/* Wizard Buttons - Enhanced Glow */
+.modal--wizard .btn--primary {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.25) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
+  border: 1.5px solid rgba(59, 130, 246, 0.8);
+  color: var(--primary);
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.6),
+    0 0 12px rgba(59, 130, 246, 0.5),
+    0 0 24px rgba(59, 130, 246, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.modal--wizard .btn--primary:hover {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.35) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.12) 100%);
+  border-color: rgba(59, 130, 246, 1);
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(59, 130, 246, 0.7),
+    0 0 32px rgba(59, 130, 246, 0.5),
+    0 0 48px rgba(59, 130, 246, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
+}
+
+.modal--wizard .btn--primary:active {
+  transform: translateY(0);
+}
+
+.modal--wizard .btn--success {
+  box-shadow:
+    0 0 12px rgba(34, 197, 94, 0.4),
+    0 0 24px rgba(34, 197, 94, 0.2);
+}
+
+.modal--wizard .btn--success:hover {
+  box-shadow:
+    0 0 16px rgba(34, 197, 94, 0.6),
+    0 0 32px rgba(34, 197, 94, 0.3),
+    0 0 48px rgba(34, 197, 94, 0.15);
+}
+
+.modal--wizard .btn--ghost {
+  border-color: rgba(148, 163, 184, 0.25);
+  color: var(--text-secondary);
+}
+
+.modal--wizard .btn--ghost:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--primary);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.25),
+    0 0 16px rgba(59, 130, 246, 0.15);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
+}
+
 .wizard-step__actions {
   display: flex;
   gap: var(--space-3);
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: var(--space-6);
   padding-top: var(--space-4);
-  border-top: 1px solid var(--border-default);
+  border-top: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 -1px 0 rgba(59, 130, 246, 0.1);
 }
 
 /* Trade Summary (Step 1) */
@@ -3727,26 +3971,43 @@ input[type="date"].input:focus {
 
 .wizard-option-btn {
   padding: var(--space-3) var(--space-2);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.04) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: var(--border-radius-sm);
   color: var(--text-secondary);
   font-size: var(--text-sm);
+  font-family: var(--font-mono);
   font-weight: 500;
+  letter-spacing: 0.02em;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .wizard-option-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--primary);
-  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: var(--primary);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.25),
+    0 0 16px rgba(59, 130, 246, 0.15);
+  text-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
 }
 
 .wizard-option-btn.active {
-  background: var(--primary-muted);
-  border-color: var(--primary);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.2) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.06) 100%);
+  border-color: rgba(59, 130, 246, 0.7);
   color: var(--primary);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.4),
+    0 0 16px rgba(59, 130, 246, 0.25),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0 6px rgba(96, 165, 250, 0.4);
 }
 
 /* Conviction Stars */
@@ -3770,12 +4031,17 @@ input[type="date"].input:focus {
 .wizard-star:hover {
   transform: scale(1.2);
   opacity: 0.7;
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.3));
 }
 
 .wizard-star.active {
   color: var(--warning);
   opacity: 1;
-  text-shadow: 0 0 8px var(--warning-glow);
+  text-shadow:
+    0 0 8px rgba(251, 191, 36, 0.8),
+    0 0 16px rgba(251, 191, 36, 0.5),
+    0 0 24px rgba(251, 191, 36, 0.3);
+  filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.6));
 }
 
 /* Confirmation (Step 4) */
@@ -3784,19 +4050,29 @@ input[type="date"].input:focus {
 }
 
 .wizard-confirmation__ticker {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: var(--text-3xl);
   font-weight: 700;
-  color: var(--success);
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 60%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin-bottom: var(--space-4);
   animation: pop 0.3s ease;
+  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.5));
 }
 
 .wizard-confirmation__details {
-  background: var(--bg-elevated);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.06) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
   border-radius: var(--border-radius);
   padding: var(--space-4) var(--space-4) var(--space-2) var(--space-4);
-  border: 1px solid var(--border-default);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
   margin-bottom: var(--space-4);
 }
 
@@ -3807,11 +4083,17 @@ input[type="date"].input:focus {
 }
 
 .wizard-confirmation__row:not(:last-child) {
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
 }
 
 #wizardConfirmDateRow {
   border-bottom: none !important;
+}
+
+#wizardConfirmSetupRow {
+  border-bottom: none !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  padding-top: var(--space-3);
 }
 
 .wizard-confirmation__label {
@@ -3908,20 +4190,28 @@ input[type="date"].input:focus {
 .wizard-notes-editable {
   min-height: 100px;
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: var(--border-radius);
-  background: var(--bg-surface);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.02) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
   font-family: var(--font-sans);
   font-size: var(--text-base);
   color: var(--text-primary);
   outline: none;
   overflow-y: auto;
   max-height: 200px;
+  transition: all 0.2s ease;
 }
 
 .wizard-notes-editable:focus {
-  border-color: var(--border-default);
-  background: var(--bg-elevated);
+  border-color: rgba(59, 130, 246, 0.4);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.04) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.7) 100%);
+  box-shadow:
+    0 0 8px rgba(59, 130, 246, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .wizard-notes-editable:empty:before {

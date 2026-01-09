@@ -111,15 +111,13 @@ class TradeWizard {
       steps: document.querySelectorAll('.wizard-step'),
 
       // Step 1 - Trade Details
-      wizardTickerInput: document.getElementById('wizardTickerInput'),
-      wizardTickerHint: document.getElementById('wizardTickerHint'),
-      wizardEntry: document.getElementById('wizardEntry'),
-      wizardStop: document.getElementById('wizardStop'),
+      wizardTicker: document.getElementById('wizardTicker'),
+      wizardEntryPrice: document.getElementById('wizardEntryPrice'),
+      wizardStopLoss: document.getElementById('wizardStopLoss'),
       wizardShares: document.getElementById('wizardShares'),
-      wizardPosition: document.getElementById('wizardPosition'),
-      wizardRisk: document.getElementById('wizardRisk'),
-      wizardTarget: document.getElementById('wizardTarget'),
-      skipAllBtn: document.getElementById('wizardSkipAll'),
+      wizardTargetPrice: document.getElementById('wizardTargetPrice'),
+      wizardTradeDate: document.getElementById('wizardTradeDate'),
+      cancel1Btn: document.getElementById('wizardCancel1'),
       next1Btn: document.getElementById('wizardNext1'),
 
       // Step 2 - Thesis
@@ -127,6 +125,7 @@ class TradeWizard {
       themeInput: document.getElementById('wizardTheme'),
       convictionStars: document.querySelectorAll('.wizard-star'),
       notesInput: document.getElementById('wizardNotes'),
+      cancel2Btn: document.getElementById('wizardCancel2'),
       back2Btn: document.getElementById('wizardBack2'),
       skip2Btn: document.getElementById('wizardSkip2'),
       next2Btn: document.getElementById('wizardNext2'),
@@ -142,6 +141,7 @@ class TradeWizard {
       confirmTheme: document.getElementById('wizardConfirmTheme'),
       streakDisplay: document.getElementById('wizardStreakDisplay'),
       streakText: document.getElementById('wizardStreakText'),
+      cancelBtn: document.getElementById('wizardCancel'),
       back3Btn: document.getElementById('wizardBack3'),
       confirmBtn: document.getElementById('wizardConfirmBtn'),
 
@@ -169,20 +169,21 @@ class TradeWizard {
       }
     });
 
-    // Step 1 buttons - require ticker before proceeding
-    this.elements.skipAllBtn?.addEventListener('click', () => {
-      if (this.validateTicker()) this.skipAll();
-    });
-    this.elements.next1Btn?.addEventListener('click', () => {
-      if (this.validateTicker()) this.goToStep(2);
+    // Step 1 buttons - validate all fields before proceeding
+    this.elements.cancel1Btn?.addEventListener('click', () => this.close());
+    this.elements.next1Btn?.addEventListener('click', async () => {
+      if (await this.validateStep1()) {
+        this.goToStep(2);
+      }
     });
 
     // Step 2 buttons
+    this.elements.cancel2Btn?.addEventListener('click', () => this.close());
     this.elements.back2Btn?.addEventListener('click', () => this.goToStep(1));
-    this.elements.skip2Btn?.addEventListener('click', () => this.skipStep(2));
     this.elements.next2Btn?.addEventListener('click', () => this.goToStep(3));
 
     // Step 3 buttons
+    this.elements.cancelBtn?.addEventListener('click', () => this.close());
     this.elements.back3Btn?.addEventListener('click', () => this.goToStep(2));
     this.elements.confirmBtn?.addEventListener('click', () => this.confirmTrade());
 
@@ -207,12 +208,25 @@ class TradeWizard {
     });
 
     // Ticker input - update state and UI as user types
-    this.elements.wizardTickerInput?.addEventListener('input', () => {
-      const ticker = this.elements.wizardTickerInput.value.toUpperCase();
-      this.elements.wizardTickerInput.value = ticker; // Force uppercase
-      this.updateTickerHint();
+    this.elements.wizardTicker?.addEventListener('input', () => {
+      const ticker = this.elements.wizardTicker.value.toUpperCase();
+      this.elements.wizardTicker.value = ticker; // Force uppercase
       // Update state so it persists
       state.updateTrade({ ticker });
+    });
+
+    // Entry, stop, shares, target inputs - update state as user types
+    this.elements.wizardEntryPrice?.addEventListener('input', () => {
+      const entry = parseFloat(this.elements.wizardEntryPrice.value) || 0;
+      state.updateTrade({ entry });
+    });
+    this.elements.wizardStopLoss?.addEventListener('input', () => {
+      const stop = parseFloat(this.elements.wizardStopLoss.value) || 0;
+      state.updateTrade({ stop });
+    });
+    this.elements.wizardTargetPrice?.addEventListener('input', () => {
+      const target = parseFloat(this.elements.wizardTargetPrice.value) || 0;
+      state.updateTrade({ target });
     });
   }
 
@@ -236,6 +250,15 @@ class TradeWizard {
     // Reset UI
     this.resetForm();
 
+    // Set trade date to today
+    if (this.elements.wizardTradeDate) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      this.elements.wizardTradeDate.value = `${year}-${month}-${day}`;
+    }
+
     // Pre-fill from calculator
     this.prefillFromCalculator();
 
@@ -252,14 +275,36 @@ class TradeWizard {
     this.elements.modal?.classList.remove('open');
     this.elements.overlay?.classList.remove('open');
     document.body.style.overflow = '';
+    this.resetForm();
+
+    // Clear calculator state so values don't persist when reopening
+    state.updateTrade({
+      ticker: '',
+      entry: null,
+      stop: null,
+      target: null
+    });
+    state.updateResults({
+      shares: 0,
+      positionSize: 0,
+      riskDollars: 0
+    });
   }
 
   resetForm() {
-    // Reset buttons
+    // Reset Step 1 inputs
+    if (this.elements.wizardTicker) this.elements.wizardTicker.value = '';
+    if (this.elements.wizardEntryPrice) this.elements.wizardEntryPrice.value = '';
+    if (this.elements.wizardStopLoss) this.elements.wizardStopLoss.value = '';
+    if (this.elements.wizardShares) this.elements.wizardShares.value = '';
+    if (this.elements.wizardTargetPrice) this.elements.wizardTargetPrice.value = '';
+    // Date will be auto-set in open() method
+
+    // Reset Step 2 buttons
     this.elements.setupBtns?.forEach(b => b.classList.remove('active'));
     this.elements.convictionStars?.forEach(s => s.classList.remove('active'));
 
-    // Reset inputs
+    // Reset Step 2 inputs
     if (this.elements.themeInput) this.elements.themeInput.value = '';
 
     // Reset notes editor
@@ -276,26 +321,79 @@ class TradeWizard {
   }
 
   updateTickerHint() {
-    const hasValue = this.elements.wizardTickerInput?.value.trim().length > 0;
-    if (this.elements.wizardTickerHint) {
-      this.elements.wizardTickerHint.style.display = hasValue ? 'none' : 'block';
-    }
-    if (this.elements.wizardTickerInput) {
-      this.elements.wizardTickerInput.classList.toggle('wizard-ticker-input--empty', !hasValue);
-    }
+    // No longer needed with new input structure
   }
 
-  validateTicker() {
-    const ticker = this.elements.wizardTickerInput?.value.trim();
+  async validateStep1() {
+    // Get all field values
+    const ticker = this.elements.wizardTicker?.value.trim() || '';
+    const entryPrice = parseFloat(this.elements.wizardEntryPrice?.value);
+    const stopPrice = parseFloat(this.elements.wizardStopLoss?.value);
+    const shares = parseInt(this.elements.wizardShares?.value);
+    const targetPrice = this.elements.wizardTargetPrice?.value.trim();
+    const tradeDate = this.elements.wizardTradeDate?.value;
+
+    // Validate ticker (required)
     if (!ticker) {
-      // Shake the input to indicate error
-      this.elements.wizardTickerInput?.classList.add('wizard-ticker-input--shake');
-      this.elements.wizardTickerInput?.focus();
-      setTimeout(() => {
-        this.elements.wizardTickerInput?.classList.remove('wizard-ticker-input--shake');
-      }, 500);
+      showToast('❌ Ticker is required', 'error');
+      this.elements.wizardTicker?.focus();
       return false;
     }
+
+    // Validate ticker with API if available
+    if (priceTracker.apiKey) {
+      try {
+        showToast('🔍 Validating ticker...', 'info');
+        await priceTracker.fetchPrice(ticker);
+      } catch (error) {
+        if (error.message.includes('Invalid ticker')) {
+          showToast(`❌ Invalid ticker: ${ticker}`, 'error');
+        } else {
+          showToast(`❌ Failed to validate ticker: ${error.message}`, 'error');
+        }
+        this.elements.wizardTicker?.focus();
+        return false;
+      }
+    }
+
+    // Validate entry price (required)
+    if (!entryPrice || isNaN(entryPrice) || entryPrice <= 0) {
+      showToast('❌ Entry price must be a valid number greater than 0', 'error');
+      this.elements.wizardEntryPrice?.focus();
+      return false;
+    }
+
+    // Validate stop loss (required)
+    if (!stopPrice || isNaN(stopPrice) || stopPrice <= 0) {
+      showToast('❌ Stop loss must be a valid number greater than 0', 'error');
+      this.elements.wizardStopLoss?.focus();
+      return false;
+    }
+
+    // Validate shares (required)
+    if (!shares || isNaN(shares) || shares <= 0) {
+      showToast('❌ Shares must be a valid number greater than 0', 'error');
+      this.elements.wizardShares?.focus();
+      return false;
+    }
+
+    // Validate target price if provided
+    if (targetPrice && targetPrice.length > 0) {
+      const target = parseFloat(targetPrice);
+      if (isNaN(target) || target <= 0) {
+        showToast('❌ Target price must be a valid number greater than 0', 'error');
+        this.elements.wizardTargetPrice?.focus();
+        return false;
+      }
+    }
+
+    // Validate date (required)
+    if (!tradeDate) {
+      showToast('❌ Trade date is required', 'error');
+      this.elements.wizardTradeDate?.focus();
+      return false;
+    }
+
     return true;
   }
 
@@ -304,31 +402,24 @@ class TradeWizard {
     const results = state.results;
     const account = state.account;
 
-    // Step 1 ticker input
-    if (this.elements.wizardTickerInput) {
-      this.elements.wizardTickerInput.value = trade.ticker || '';
-      this.updateTickerHint();
+    // Step 1 - Fill input fields from calculator
+    if (this.elements.wizardTicker) {
+      this.elements.wizardTicker.value = trade.ticker || '';
     }
-    if (this.elements.wizardEntry) {
-      this.elements.wizardEntry.textContent = formatCurrency(trade.entry || 0);
+    if (this.elements.wizardEntryPrice) {
+      this.elements.wizardEntryPrice.value = trade.entry || '';
     }
-    if (this.elements.wizardStop) {
-      this.elements.wizardStop.textContent = formatCurrency(trade.stop || 0);
+    if (this.elements.wizardStopLoss) {
+      this.elements.wizardStopLoss.value = trade.stop || '';
     }
     if (this.elements.wizardShares) {
-      this.elements.wizardShares.textContent = formatNumber(results.shares || 0);
+      this.elements.wizardShares.value = results.shares || '';
     }
-    if (this.elements.wizardPosition) {
-      this.elements.wizardPosition.textContent = formatCurrency(results.positionSize || 0);
-    }
-    if (this.elements.wizardRisk) {
-      this.elements.wizardRisk.textContent = formatCurrency(results.riskDollars || 0);
-    }
-    if (this.elements.wizardTarget) {
-      this.elements.wizardTarget.textContent = trade.target ? formatCurrency(trade.target) : '—';
+    if (this.elements.wizardTargetPrice) {
+      this.elements.wizardTargetPrice.value = trade.target || '';
     }
 
-    // Step 2 notes - pre-fill from Quick Note on dashboard
+    // Step 2 notes - pre-fill from Quick Note
     const quickNoteEl = document.getElementById('tradeNotes');
     if (this.elements.notesInput && quickNoteEl) {
       const quickNoteContent = quickNoteEl.innerHTML.trim();
@@ -430,11 +521,36 @@ class TradeWizard {
   }
 
   updateConfirmation() {
-    // Update ticker from input
-    const ticker = this.elements.wizardTickerInput?.value.trim() || '';
+    // Get values from wizard inputs
+    const ticker = this.elements.wizardTicker?.value.trim() || '';
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const shares = parseInt(this.elements.wizardShares?.value) || 0;
+    const riskPerShare = entry - (parseFloat(this.elements.wizardStopLoss?.value) || 0);
+    const riskDollars = shares * riskPerShare;
+    const riskPercent = (riskDollars / state.account.currentSize) * 100;
+
+    // Update ticker display
     if (this.elements.confirmTicker) {
       this.elements.confirmTicker.textContent = ticker || 'No Ticker';
       this.elements.confirmTicker.classList.toggle('wizard-confirmation__ticker--empty', !ticker);
+    }
+
+    // Update position display
+    if (this.elements.confirmPosition) {
+      this.elements.confirmPosition.textContent = `${formatNumber(shares)} shares @ ${formatCurrency(entry)}`;
+    }
+
+    // Update risk display
+    if (this.elements.confirmRisk) {
+      this.elements.confirmRisk.textContent = `${formatCurrency(riskDollars)} (${formatPercent(riskPercent)})`;
+    }
+
+    // Update date display
+    if (this.elements.confirmDate) {
+      const tradeDate = this.elements.wizardTradeDate?.value || new Date().toISOString().split('T')[0];
+      const timestamp = createTimestampFromDateInput(tradeDate);
+      const formattedDate = formatDate(timestamp, { year: 'numeric' });
+      this.elements.confirmDate.textContent = formattedDate;
     }
 
     // Update setup row
@@ -478,21 +594,32 @@ class TradeWizard {
   }
 
   async logTrade(wizardComplete = false) {
-    const trade = state.trade;
-    const results = state.results;
-    const account = state.account;
+    // Get values from wizard inputs
+    const ticker = this.elements.wizardTicker?.value.trim() || '';
+    const entryPrice = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stopPrice = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const targetPrice = parseFloat(this.elements.wizardTargetPrice?.value) || 0;
+    const shares = parseInt(this.elements.wizardShares?.value) || 0;
+    const tradeDate = this.elements.wizardTradeDate?.value || new Date().toISOString().split('T')[0];
+
+    // Calculate derived values
+    const riskPerShare = entryPrice - stopPrice;
+    const positionSize = shares * entryPrice;
+    const riskDollars = shares * riskPerShare;
+    const riskPercent = (riskDollars / state.account.currentSize) * 100;
+    const stopDistance = riskPerShare;
 
     // Validate ticker and fetch company data if API key is configured
     let companyData = null;
-    if (priceTracker.apiKey && trade.ticker) {
+    if (priceTracker.apiKey && ticker) {
       try {
         // Show loading toast
         showToast('🔍 Validating ticker...', 'info');
 
         // Fetch price to validate ticker and company profile in parallel
         const [priceData, profileData] = await Promise.all([
-          priceTracker.fetchPrice(trade.ticker),
-          priceTracker.fetchCompanyProfile(trade.ticker)
+          priceTracker.fetchPrice(ticker),
+          priceTracker.fetchCompanyProfile(ticker)
         ]);
 
         companyData = profileData;
@@ -510,25 +637,24 @@ class TradeWizard {
       }
     }
 
-    // Get custom trade date from calculator
-    const tradeDateInput = document.getElementById('tradeDate');
-    const timestamp = createTimestampFromDateInput(tradeDateInput?.value);
+    // Get timestamp from trade date
+    const timestamp = createTimestampFromDateInput(tradeDate);
 
-    // Build entry
-    const entry = {
-      timestamp, // Custom timestamp based on trade date
-      ticker: trade.ticker,
-      entry: trade.entry,
-      stop: trade.stop,
-      originalStop: trade.stop,
-      currentStop: trade.stop,
-      target: trade.target,
-      shares: results.shares,
-      positionSize: results.positionSize,
-      riskDollars: results.riskDollars,
-      riskPercent: account.riskPercent,
-      stopDistance: results.stopDistance,
-      notes: this.notes || trade.notes || '',
+    // Build journal entry
+    const journalEntry = {
+      timestamp,
+      ticker,
+      entry: entryPrice,
+      stop: stopPrice,
+      originalStop: stopPrice,
+      currentStop: stopPrice,
+      target: targetPrice || null,
+      shares,
+      positionSize,
+      riskDollars,
+      riskPercent,
+      stopDistance,
+      notes: this.notes || '',
       status: 'open',
 
       // Thesis data
@@ -541,7 +667,7 @@ class TradeWizard {
     };
 
     // Add to journal
-    const newEntry = state.addJournalEntry(entry);
+    const newEntry = state.addJournalEntry(journalEntry);
 
     // Update progress
     const progress = state.journalMeta.achievements.progress;

@@ -46,7 +46,6 @@
   <link rel="stylesheet" href="src/features/positions/positions.css">
   <link rel="stylesheet" href="src/features/journal/journal.css">
   <link rel="stylesheet" href="src/features/stats/stats.css">
-  <link rel="stylesheet" href="src/features/compound/compound.css">
 </head>
 <body>
   <div class="app">
@@ -54,7 +53,7 @@
     <header class="header">
       <div class="header__brand">
         <a href="#" class="header__logo-link">
-          <span class="header__logo">$tonk.<span class="header__logo-highlight">Stats</span></span>
+          <span class="header__logo"><span class="header__logo-dollar">$</span>tonk.<span class="header__logo-highlight">Stats</span></span>
         </a>
         <!-- Mobile nav trigger (stays in header) -->
         <button class="mobile-nav-trigger" id="mobileNavTrigger" aria-label="Toggle navigation">
@@ -62,16 +61,7 @@
           <span class="mobile-nav-trigger__chevron"></span>
         </button>
         <nav class="view-nav" id="viewNav">
-          <button class="view-nav__btn view-nav__btn--active" data-view="dashboard">
-            <svg class="view-nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="4" y="2" width="16" height="20" rx="2"></rect>
-              <line x1="8" y1="6" x2="16" y2="6"></line>
-              <line x1="8" y1="10" x2="16" y2="10"></line>
-              <line x1="8" y1="14" x2="12" y2="14"></line>
-            </svg>
-            <span class="view-nav__text">Dashboard</span>
-          </button>
-          <button class="view-nav__btn" data-view="positions">
+          <button class="view-nav__btn view-nav__btn--active" data-view="positions">
             <svg class="view-nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
               <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
@@ -93,13 +83,6 @@
             </svg>
             <span class="view-nav__text">Stats</span>
           </button>
-          <button class="view-nav__btn" data-view="compound">
-            <svg class="view-nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 3v18h18"></path>
-              <path d="M18 9l-5-6-4 10-3-3"></path>
-            </svg>
-            <span class="view-nav__text">Compound</span>
-          </button>
         </nav>
       </div>
       <!-- Mobile nav backdrop -->
@@ -118,607 +101,8 @@
       </div>
     </header>
 
-    <!-- Main Content - 3 Panel Layout -->
-    <main class="main">
-      <!-- Dashboard Header -->
-      <div class="dashboard-header">
-        <div class="dashboard-header__left">
-          <span class="dashboard-header__icon">🎯</span>
-          <div>
-            <h1 class="dashboard-header__title">Dashboard</h1>
-            <span class="dashboard-header__subtitle">Calculate position sizes, manage risk, and log trades</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Left Panel: Inputs -->
-      <section class="panel panel--input">
-        <div class="panel__content">
-
-          <!-- Trade Entry - HERO -->
-          <div class="card card--hero" id="alertCard">
-            <div class="card__header">
-              <span class="card__icon">📈</span>
-              <h2 class="card__title">Trade Setup</h2>
-              <button class="btn btn--clear" id="clearCalculatorBtn" title="Clear all fields">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-                <span>Clear</span>
-              </button>
-            </div>
-            <p class="card__tagline">Calculate position size based on your risk</p>
-            <div class="card__body">
-              <div class="input-group">
-                <label class="input-label" for="ticker">
-                  Ticker
-                  <span class="label-optional">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  class="input input--mono input--lg"
-                  id="ticker"
-                  placeholder="TSLA"
-                  enterkeyhint="next"
-                >
-              </div>
-
-              <div class="input-row">
-                <div class="input-group">
-                  <label class="input-label" for="entryPrice">Entry Price</label>
-                  <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
-                    <span class="input-prefix">$</span>
-                    <input
-                      type="text"
-                      class="input input--mono"
-                      id="entryPrice"
-                      placeholder="0.00"
-                      enterkeyhint="next"
-                    >
-                    <div class="input-stepper">
-                      <button type="button" class="input-stepper__btn" data-target="entryPrice" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
-                      <button type="button" class="input-stepper__btn" data-target="entryPrice" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
-                    </div>
-                  </div>
-                </div>
-                <div class="input-group">
-                  <label class="input-label" for="stopLoss">
-                    Stop Loss
-                    <span class="tooltip">
-                      <span class="tooltip__icon">?</span>
-                      <span class="tooltip__content">Your exit price if the trade goes against you. Set below your entry price for long positions to limit potential losses.</span>
-                    </span>
-                  </label>
-                  <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
-                    <span class="input-prefix">$</span>
-                    <input
-                      type="text"
-                      class="input input--mono"
-                      id="stopLoss"
-                      placeholder="0.00"
-                      enterkeyhint="next"
-                    >
-                    <div class="input-stepper">
-                      <button type="button" class="input-stepper__btn" data-target="stopLoss" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
-                      <button type="button" class="input-stepper__btn" data-target="stopLoss" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="input-group">
-                <label class="input-label" for="targetPrice">
-                  Target Price <span class="label-optional">(optional)</span>
-                  <span class="tooltip">
-                    <span class="tooltip__icon">?</span>
-                    <span class="tooltip__content">Your profit target price. Use this to plan your risk/reward ratio before entering a trade. A good rule of thumb is targeting at least 2-3x your risk.</span>
-                  </span>
-                </label>
-                <div class="input-wrapper input-wrapper--prefix">
-                  <span class="input-prefix">$</span>
-                  <input
-                    type="text"
-                    class="input input--mono input--success"
-                    id="targetPrice"
-                    placeholder="0.00"
-                    enterkeyhint="done"
-                  >
-                </div>
-              </div>
-
-              <!-- Risk Selection -->
-              <div class="risk-selector">
-                <div class="risk-selector__header">
-                  <label class="input-label">
-                    Risk %
-                    <span class="tooltip">
-                      <span class="tooltip__icon">?</span>
-                      <span class="tooltip__content">The maximum % of your account you're willing to lose if stopped out. This is NOT your position size—you can use 20% of your account while only risking 1% if your stop is tight enough.</span>
-                    </span>
-                  </label>
-                </div>
-                <div class="risk-selector__buttons">
-                  <button type="button" class="risk-btn" data-risk="0.1">0.1%</button>
-                  <button type="button" class="risk-btn" data-risk="0.25">0.25%</button>
-                  <button type="button" class="risk-btn" data-risk="0.5">0.5%</button>
-                  <button type="button" class="risk-btn risk-btn--active" data-risk="1">1%</button>
-                </div>
-                <div class="risk-selector__custom">
-                  <span class="risk-selector__label">Custom</span>
-                  <div class="input-wrapper input-wrapper--suffix input-wrapper--compact">
-                    <input type="text" class="input input--mono" id="customRisk" placeholder="">
-                    <span class="input-suffix">%</span>
-                  </div>
-                  <span class="risk-selector__calculated" id="calculatedIndicator" style="display: none;">calculated from shares bought</span>
-                </div>
-                <div class="risk-selector__shares">
-                  <span class="risk-selector__label">Shares Bought <span class="label-optional">(optional)</span></span>
-                  <div class="input-wrapper input-wrapper--compact">
-                    <input type="text" class="input input--mono" id="sharesBought" placeholder="">
-                  </div>
-                </div>
-                <div class="risk-selector__date">
-                  <span class="risk-selector__label">Trade Date <span class="label-optional">(optional)</span></span>
-                  <div class="input-wrapper input-wrapper--compact">
-                    <input type="date" class="input input--mono" id="tradeDate">
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Divider -->
-          <div class="panel-divider"></div>
-
-          <!-- Quick Settings - Collapsible -->
-          <div class="card card--collapsible card--settings" id="settingsCard">
-            <button class="card__header card__header--toggle" id="settingsToggle">
-              <span class="card__icon">⚡</span>
-              <h2 class="card__title">Quick Settings</h2>
-              <span class="settings-summary" id="settingsSummary">$10k acc. · Max 100%</span>
-              <svg class="card__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </button>
-            <div class="card__body card__body--collapsible">
-              <div class="settings-grid">
-                <!-- Account Size -->
-                <div class="settings-item">
-                  <label class="input-label" for="accountSize">
-                    Account Size
-                    <span class="tooltip">
-                      <span class="tooltip__icon">?</span>
-                      <span class="tooltip__content">Enter your total account value (cash + positions), not just available cash. This ensures your risk calculations reflect your true portfolio size.</span>
-                    </span>
-                  </label>
-                  <div class="input-wrapper input-wrapper--prefix">
-                    <span class="input-prefix">$</span>
-                    <input
-                      type="text"
-                      class="input input--mono"
-                      id="accountSize"
-                      value="10,000"
-                      placeholder="10,000"
-                    >
-                  </div>
-                  <span class="input-hint">Supports K/M notation (e.g. 50k, 1.5m)</span>
-                </div>
-
-                <!-- Max Position Size -->
-                <div class="settings-item">
-                  <label class="input-label">
-                    Max Position Size
-                    <span class="tooltip">
-                      <span class="tooltip__icon">?</span>
-                      <span class="tooltip__content">Limits how much of your account can go into one trade. Even with low risk %, a tight stop can result in a huge position. Set to 10-25% to avoid overexposure to a single stock.</span>
-                    </span>
-                  </label>
-                  <div class="preset-group preset-group--compact">
-                    <button class="preset-btn" data-value="10">10%</button>
-                    <button class="preset-btn" data-value="20">20%</button>
-                    <button class="preset-btn" data-value="50">50%</button>
-                    <button class="preset-btn active" data-value="100">100%</button>
-                  </div>
-                  <div class="preset-custom">
-                    <span class="preset-custom__label">Custom</span>
-                    <div class="input-wrapper input-wrapper--suffix input-wrapper--compact">
-                      <input type="text" class="input input--mono" id="maxPositionPercent" value="100">
-                      <span class="input-suffix">%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- Center Panel: Results -->
-      <section class="panel panel--results">
-        <div class="panel__content">
-
-          <div class="results-header">
-            <span class="results-icon">🔎</span>
-            <h2 class="results-title">Trade Details</h2>
-            <span class="results-ticker" id="resultsTicker">—</span>
-          </div>
-
-          <!-- Welcome Card (shown when no calculation) -->
-          <div class="welcome-card" id="welcomeCard">
-            <!-- Ghosted preview cards -->
-            <div class="welcome-card__preview">
-              <div class="welcome-card__ghost-card">
-                <span class="welcome-card__ghost-label">Shares to Buy</span>
-                <span class="welcome-card__ghost-value">250</span>
-              </div>
-              <div class="welcome-card__ghost-card">
-                <span class="welcome-card__ghost-label">Position Size</span>
-                <span class="welcome-card__ghost-value">$12,500</span>
-              </div>
-              <div class="welcome-card__ghost-card welcome-card__ghost-card--danger">
-                <span class="welcome-card__ghost-label">Risk Amount</span>
-                <span class="welcome-card__ghost-value">$500</span>
-              </div>
-              <div class="welcome-card__ghost-card welcome-card__ghost-card--success">
-                <span class="welcome-card__ghost-label">5R Target</span>
-                <span class="welcome-card__ghost-value">$62.50</span>
-              </div>
-            </div>
-
-            <!-- Main content -->
-            <div class="welcome-card__content">
-              <div class="welcome-card__icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="4" y="2" width="16" height="20" rx="2"></rect>
-                  <line x1="8" y1="6" x2="16" y2="6"></line>
-                  <line x1="8" y1="10" x2="10" y2="10"></line>
-                  <line x1="14" y1="10" x2="16" y2="10"></line>
-                  <line x1="8" y1="14" x2="10" y2="14"></line>
-                  <line x1="14" y1="14" x2="16" y2="14"></line>
-                  <line x1="8" y1="18" x2="10" y2="18"></line>
-                  <line x1="14" y1="18" x2="16" y2="18"></line>
-                </svg>
-              </div>
-              <h3 class="welcome-card__title">Size Your Trade</h3>
-              <p class="welcome-card__subtitle">Risk-based position sizing in seconds</p>
-              <ul class="welcome-card__list">
-                <li><span class="welcome-card__check"></span>Exact position size for your risk</li>
-                <li><span class="welcome-card__check"></span>Shares to buy at entry price</li>
-                <li><span class="welcome-card__check"></span>Risk amount in dollars</li>
-                <li><span class="welcome-card__check"></span>R-multiple profit targets</li>
-              </ul>
-              <p class="welcome-card__hint">
-                <span class="welcome-card__hint-arrow welcome-card__hint-arrow--left">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 12H5"></path>
-                    <path d="m12 19-7-7 7-7"></path>
-                  </svg>
-                </span>
-                <span class="welcome-card__hint-arrow welcome-card__hint-arrow--up">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 19V5"></path>
-                    <path d="m5 12 7-7 7 7"></path>
-                  </svg>
-                </span>
-                <span class="welcome-card__hint-text">Enter entry & stop prices to begin</span>
-              </p>
-            </div>
-          </div>
-
-          <!-- Primary Results (hidden until calculation) -->
-          <div class="results-grid" id="resultsGrid">
-            <div class="result-card result-card--primary">
-              <span class="result-card__label">Shares to Buy</span>
-              <span class="result-card__value" id="shares">0</span>
-              <span class="result-card__sub">shares</span>
-            </div>
-
-            <div class="result-card result-card--primary">
-              <span class="result-card__label">Position Size</span>
-              <span class="result-card__value" id="positionSize">$0.00</span>
-              <span class="result-card__sub" id="positionPercent">0% of account</span>
-            </div>
-
-            <div class="result-card result-card--danger result-card--activatable">
-              <span class="result-card__label">Risk Amount</span>
-              <span class="result-card__value" id="riskAmount">$0.00</span>
-              <span class="result-card__sub" id="riskPercentDisplay">0% of account</span>
-            </div>
-
-            <div class="result-card result-card--stop result-card--activatable">
-              <span class="result-card__label">Stop Distance</span>
-              <span class="result-card__value" id="stopDistance">0%</span>
-              <span class="result-card__sub" id="stopPerShare">$0.00/share</span>
-            </div>
-          </div>
-
-          <!-- R-Multiple Chart Levels -->
-          <div class="r-levels" id="rProgressBar">
-            <div class="r-levels__header">
-              <div class="r-levels__header-left">
-                <h3 class="r-levels__title">Risk Levels</h3>
-                <span class="r-levels__subtitle">R-Multiple Targets</span>
-              </div>
-              <div class="r-levels__header-right">
-                <span class="r-levels__header-label">Potential Profit</span>
-              </div>
-            </div>
-            <div class="r-levels__body">
-              <div class="r-levels__row r-levels__row--r5">
-                <span class="r-levels__tag">5R</span>
-                <span class="r-levels__price" id="r5RPrice">$0.00</span>
-                <span class="r-levels__line"></span>
-                <span class="r-levels__profit" id="r5RProfit">+$0.00</span>
-                <span class="r-levels__badge">Trim</span>
-              </div>
-              <div class="r-levels__row r-levels__row--r4">
-                <span class="r-levels__tag">4R</span>
-                <span class="r-levels__price" id="r4RPrice">$0.00</span>
-                <span class="r-levels__line"></span>
-                <span class="r-levels__profit" id="r4RProfit">+$0.00</span>
-              </div>
-              <div class="r-levels__row r-levels__row--r3">
-                <span class="r-levels__tag">3R</span>
-                <span class="r-levels__price" id="r3RPrice">$0.00</span>
-                <span class="r-levels__line"></span>
-                <span class="r-levels__profit" id="r3RProfit">+$0.00</span>
-              </div>
-              <div class="r-levels__row r-levels__row--r2">
-                <span class="r-levels__tag">2R</span>
-                <span class="r-levels__price" id="r2RPrice">$0.00</span>
-                <span class="r-levels__line"></span>
-                <span class="r-levels__profit" id="r2RProfit">+$0.00</span>
-              </div>
-              <div class="r-levels__row r-levels__row--r1">
-                <span class="r-levels__tag">1R</span>
-                <span class="r-levels__price" id="r1RPrice">$0.00</span>
-                <span class="r-levels__line"></span>
-                <span class="r-levels__profit" id="r1RProfit">+$0.00</span>
-              </div>
-              <div class="r-levels__row r-levels__row--entry">
-                <span class="r-levels__tag">Entry</span>
-                <span class="r-levels__price" id="rEntryPrice">$0.00</span>
-                <span class="r-levels__line r-levels__line--solid"></span>
-                <span class="r-levels__profit r-levels__profit--muted">Breakeven</span>
-              </div>
-              <div class="r-levels__row r-levels__row--stop">
-                <span class="r-levels__tag">Stop</span>
-                <span class="r-levels__price" id="rStopPrice">$0.00</span>
-                <span class="r-levels__line"></span>
-                <span class="r-levels__profit r-levels__profit--loss" id="rStopProfit">-$0.00</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- What If Section - Progressive Disclosure (only shows when target price entered) -->
-          <div class="what-if" id="whatIfSection">
-            <div class="what-if__header">
-              <div class="what-if__header-left">
-                <h3 class="what-if__title">What If?</h3>
-                <span class="what-if__subtitle">Target Price Projection</span>
-              </div>
-              <div class="what-if__header-right">
-                <span class="what-if__target-label">If price hits</span>
-                <span class="what-if__target-price" id="whatIfTargetPrice">$0.00</span>
-              </div>
-            </div>
-            <div class="what-if__body">
-              <div class="what-if__stat">
-                <span class="what-if__stat-value" id="rMultiple">0.00R</span>
-                <span class="what-if__stat-label">R-Multiple</span>
-              </div>
-              <div class="what-if__stat">
-                <span class="what-if__stat-value" id="profitPerShare">$0.00</span>
-                <span class="what-if__stat-label">Per Share</span>
-              </div>
-              <div class="what-if__stat what-if__stat--highlight">
-                <span class="what-if__stat-value" id="potentialProfit">$0.00</span>
-                <span class="what-if__stat-label">Profit</span>
-              </div>
-              <div class="what-if__stat">
-                <span class="what-if__stat-value" id="profitROI">0%</span>
-                <span class="what-if__stat-label">ROI</span>
-              </div>
-              <div class="what-if__stat">
-                <span class="what-if__stat-value" id="accountGrowth">0%</span>
-                <span class="what-if__stat-label">Account Growth</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Risk Scenarios -->
-          <div class="scenarios-section" id="scenariosSection">
-            <button class="scenarios-toggle" id="scenariosToggle">
-              <span>📊 Risk Scenarios</span>
-              <svg class="scenarios-toggle__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </button>
-            <div class="scenarios-content" id="scenariosContent">
-              <table class="scenarios-table">
-                <thead>
-                  <tr>
-                    <th>Risk %</th>
-                    <th>Shares</th>
-                    <th>Position</th>
-                    <th>Risk $</th>
-                  </tr>
-                </thead>
-                <tbody id="scenariosBody">
-                  <tr><td colspan="4" class="scenarios-empty">Enter trade details to see scenarios</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- Right Panel: Journal -->
-      <section class="panel panel--journal">
-        <div class="panel__content">
-
-          <!-- Quick Log -->
-          <div class="card card--highlight">
-            <div class="card__header">
-              <span class="card__icon">📝</span>
-              <h2 class="card__title">Log This Trade</h2>
-            </div>
-            <div class="card__body">
-              <div class="input-group">
-                <label class="input-label" for="tradeNotes">Quick note <span class="label-optional">(Recommended)</span></label>
-                <div
-                  id="tradeNotes"
-                  class="trade-notes-editable"
-                  contenteditable="true"
-                  placeholder="Setup? Theme? Entry tactic?"
-                ></div>
-              </div>
-              <button class="btn btn--success btn--full" id="logTradeBtn" disabled>
-                Save to Journal
-              </button>
-              <span class="input-hint input-hint--center" id="wizardHint" style="display: none;">
-                Tip: Shift+Click to save without wizard
-              </span>
-            </div>
-          </div>
-
-          <!-- Positions -->
-          <div class="card">
-            <div class="card__header">
-              <h2 class="card__title">Positions</h2>
-              <span class="streak-display" id="streakDisplay" style="display: none;">
-                <span class="streak-display__flame">🔥</span>
-                <span class="streak-display__text" id="streakText">0 day streak</span>
-              </span>
-              <span class="badge" id="activeTradeCount">0 open</span>
-            </div>
-            <div class="card__body">
-              <div class="risk-summary" id="riskSummary">
-                <span class="risk-summary__label">Open Risk:
-                  <span class="tooltip">
-                    <span class="tooltip__icon">?</span>
-                    <span class="tooltip__content">Total dollar amount at risk across all active trades if every position hits its stop loss.</span>
-                  </span>
-                </span>
-                <span class="risk-summary__value">$0</span>
-                <span class="risk-summary__percent">(0%)</span>
-                <span class="risk-summary__indicator risk-summary__indicator--low">LOW</span>
-              </div>
-
-              <div class="active-trades" id="activeTrades">
-                <div class="empty-state">
-                  <span class="empty-state__icon">🧘</span>
-                  <span class="empty-state__text">No active trades</span>
-                  <span class="empty-state__hint">Log a trade to see it here</span>
-                </div>
-              </div>
-
-              <button class="btn btn--ghost btn--full btn--sm" id="viewPositionsBtn" style="margin-top: var(--space-3);">
-                View All Positions →
-              </button>
-            </div>
-          </div>
-
-          <!-- Journal Actions -->
-          <div class="journal-actions">
-            <button class="btn btn--secondary btn--full" id="viewJournalBtn">
-              📖 View Full Journal
-            </button>
-            <div class="btn-group">
-              <button class="btn btn--ghost" id="exportCSVBtn">CSV</button>
-              <button class="btn btn--ghost" id="exportTSVBtn">TSV</button>
-              <button class="btn btn--ghost" id="exportPDFBtn">PDF</button>
-            </div>
-          </div>
-
-        </div>
-      </section>
-    </main>
-
     <!-- Positions View -->
-    <section class="positions-view view--hidden" id="positionsView">
-      <div class="positions-header">
-        <div class="positions-header__left">
-          <div>
-            <h1 class="positions-header__title">Positions</h1>
-            <span class="positions-header__subtitle" id="positionsCount">0 active positions</span>
-          </div>
-        </div>
-        <div class="positions-header__filters">
-          <div class="filter-dropdown">
-            <button class="filter-dropdown__btn" id="positionsFilterBtn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-              </svg>
-              Filter
-              <span class="filter-dropdown__count" id="positionsFilterCount" style="display: none;"></span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </button>
-            <div class="filter-dropdown__panel" id="positionsFilterPanel">
-              <div class="filter-dropdown__header">
-                <span class="filter-dropdown__title">FILTERS</span>
-                <button class="filter-dropdown__close" id="positionsFilterClose">×</button>
-              </div>
-              <div class="filter-dropdown__section">
-                <label class="filter-dropdown__section-title">Status</label>
-                <div class="filter-status-grid" style="grid-template-columns: repeat(3, 1fr);">
-                  <button class="filter-status-btn active" data-status="all">All</button>
-                  <button class="filter-status-btn" data-status="open">Open</button>
-                  <button class="filter-status-btn" data-status="trimmed">Trimmed</button>
-                </div>
-              </div>
-              <div class="filter-dropdown__section">
-                <label class="filter-dropdown__section-title">Type</label>
-                <div class="filter-dropdown__options">
-                  <label class="filter-checkbox">
-                    <input type="checkbox" id="filterTypeAll" value="all" checked>
-                    <span class="filter-checkbox__label">All Types</span>
-                  </label>
-                </div>
-                <div class="filter-dropdown__divider"></div>
-                <div class="filter-dropdown__options filter-dropdown__options--grid">
-                  <label class="filter-checkbox">
-                    <input type="checkbox" value="ep">
-                    <span class="filter-checkbox__label">EP</span>
-                  </label>
-                  <label class="filter-checkbox">
-                    <input type="checkbox" value="long-term">
-                    <span class="filter-checkbox__label">Long-term</span>
-                  </label>
-                  <label class="filter-checkbox">
-                    <input type="checkbox" value="base">
-                    <span class="filter-checkbox__label">Base</span>
-                  </label>
-                  <label class="filter-checkbox">
-                    <input type="checkbox" value="breakout">
-                    <span class="filter-checkbox__label">Breakout</span>
-                  </label>
-                  <label class="filter-checkbox">
-                    <input type="checkbox" value="bounce">
-                    <span class="filter-checkbox__label">Bounce</span>
-                  </label>
-                  <label class="filter-checkbox">
-                    <input type="checkbox" value="other">
-                    <span class="filter-checkbox__label">Other</span>
-                  </label>
-                </div>
-              </div>
-              <div class="filter-dropdown__footer">
-                <button class="btn btn--ghost btn--sm" id="positionsClearFilters">Clear All</button>
-                <button class="btn btn--primary btn--sm" id="positionsApplyFilters">Apply</button>
-              </div>
-            </div>
-            <!-- Filter backdrop overlay -->
-            <div class="filter-dropdown__backdrop" id="positionsFilterBackdrop"></div>
-          </div>
-        </div>
-      </div>
-
+    <section class="positions-view view--active" id="positionsView">
       <!-- Risk Overview Bar -->
       <div class="positions-risk-bar" id="positionsRiskBar">
         <div class="positions-risk-bar__item">
@@ -745,6 +129,91 @@
           <span class="positions-risk-bar__value positions-risk-bar__value--indicator" id="positionsRiskLevel">LOW</span>
           <div class="risk-level-tooltip" id="riskLevelTooltip">Portfolio risk under 0.5% - conservative position sizing</div>
         </div>
+        <div class="positions-risk-bar__divider"></div>
+        <div class="positions-risk-bar__item">
+          <span class="positions-risk-bar__label">Active</span>
+          <span class="positions-risk-bar__value" id="positionsCount">0</span>
+        </div>
+        <div class="positions-risk-bar__divider"></div>
+        <button class="btn btn--primary positions-new-btn" id="positionsNewBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          New Position
+        </button>
+      </div>
+
+      <!-- Filter Section -->
+      <div class="positions-filter-section">
+        <div class="filter-dropdown">
+          <button class="filter-dropdown__btn" id="positionsFilterBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            Filter
+            <span class="filter-dropdown__count" id="positionsFilterCount" style="display: none;"></span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="filter-dropdown__panel" id="positionsFilterPanel">
+            <div class="filter-dropdown__header">
+              <span class="filter-dropdown__title">FILTERS</span>
+              <button class="filter-dropdown__close" id="positionsFilterClose">×</button>
+            </div>
+            <div class="filter-dropdown__section">
+              <label class="filter-dropdown__section-title">Status</label>
+              <div class="filter-status-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <button class="filter-status-btn active" data-status="all">All</button>
+                <button class="filter-status-btn" data-status="open">Open</button>
+                <button class="filter-status-btn" data-status="trimmed">Trimmed</button>
+              </div>
+            </div>
+            <div class="filter-dropdown__section">
+              <label class="filter-dropdown__section-title">Type</label>
+              <div class="filter-dropdown__options">
+                <label class="filter-checkbox">
+                  <input type="checkbox" id="filterTypeAll" value="all" checked>
+                  <span class="filter-checkbox__label">All Types</span>
+                </label>
+              </div>
+              <div class="filter-dropdown__divider"></div>
+              <div class="filter-dropdown__options filter-dropdown__options--grid">
+                <label class="filter-checkbox">
+                  <input type="checkbox" value="ep">
+                  <span class="filter-checkbox__label">EP</span>
+                </label>
+                <label class="filter-checkbox">
+                  <input type="checkbox" value="long-term">
+                  <span class="filter-checkbox__label">Long-term</span>
+                </label>
+                <label class="filter-checkbox">
+                  <input type="checkbox" value="base">
+                  <span class="filter-checkbox__label">Base</span>
+                </label>
+                <label class="filter-checkbox">
+                  <input type="checkbox" value="breakout">
+                  <span class="filter-checkbox__label">Breakout</span>
+                </label>
+                <label class="filter-checkbox">
+                  <input type="checkbox" value="bounce">
+                  <span class="filter-checkbox__label">Bounce</span>
+                </label>
+                <label class="filter-checkbox">
+                  <input type="checkbox" value="other">
+                  <span class="filter-checkbox__label">Other</span>
+                </label>
+              </div>
+            </div>
+            <div class="filter-dropdown__footer">
+              <button class="btn btn--ghost btn--sm" id="positionsClearFilters">Clear All</button>
+              <button class="btn btn--primary btn--sm" id="positionsApplyFilters">Apply</button>
+            </div>
+          </div>
+          <!-- Filter backdrop overlay -->
+          <div class="filter-dropdown__backdrop" id="positionsFilterBackdrop"></div>
+        </div>
       </div>
 
       <!-- Positions Grid -->
@@ -755,9 +224,9 @@
       <!-- Empty State -->
       <div class="positions-empty" id="positionsEmpty">
         <span class="positions-empty__icon">🧘</span>
-        <h2 class="positions-empty__title" id="positionsEmptyTitle">No Active Positions</h2>
-        <p class="positions-empty__text" id="positionsEmptyText">You're currently all cash. Head to the Dashboard to log a new trade.</p>
-        <button class="btn btn--primary" id="positionsGoToDashboard">Go to Dashboard</button>
+        <h2 class="positions-empty__title" id="positionsEmptyTitle">None Active</h2>
+        <p class="positions-empty__text" id="positionsEmptyText">You're currently all cash. Click below to log a new trade.</p>
+        <button class="btn btn--primary" id="positionsNewBtn2">Open Wizard</button>
       </div>
     </section>
 
@@ -928,8 +397,8 @@
       <div class="journal-empty" id="journalEmpty">
         <span class="journal-empty__icon">📝</span>
         <h2 class="journal-empty__title">No Trades Yet</h2>
-        <p class="journal-empty__text">Start logging trades from the Dashboard to build your trading history.</p>
-        <button class="btn btn--primary" id="journalGoToDashboard">Go to Dashboard</button>
+        <p class="journal-empty__text">Start logging trades to build your trading history.</p>
+        <button class="btn btn--primary" id="journalNewBtn">Open Wizard</button>
       </div>
 
       <!-- Export Actions -->
@@ -1088,136 +557,6 @@
         </div>
       </div>
     </section>
-
-    <!-- Compound View -->
-    <section class="view--compound view--hidden" id="compoundView">
-      <div class="compound-header">
-        <div class="compound-header__left">
-          <span class="compound-header__icon">📈</span>
-          <div>
-            <h1 class="compound-header__title">Compound Calculator</h1>
-            <span class="compound-header__subtitle">See how your capital grows over 10 years</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2-Column Layout -->
-      <div class="compound-layout">
-        <!-- Left Sidebar -->
-        <aside class="compound-sidebar">
-          <!-- Starting Capital Card -->
-          <div class="card compound-card">
-            <div class="card__header">
-              <span class="card__icon">💰</span>
-              <h2 class="card__title">Starting Capital</h2>
-            </div>
-            <div class="card__body">
-              <div class="input-group">
-                <div class="input-wrapper input-wrapper--prefix">
-                  <span class="input-prefix">$</span>
-                  <input type="text" id="compoundStartingCapital" class="input input--mono" placeholder="10000" value="10,000">
-                </div>
-              </div>
-              <div class="preset-group">
-                <button class="preset-btn" data-capital="1000">$1K</button>
-                <button class="preset-btn" data-capital="5000">$5K</button>
-                <button class="preset-btn active" data-capital="10000">$10K</button>
-                <button class="preset-btn" data-capital="25000">$25K</button>
-                <button class="preset-btn" data-capital="50000">$50K</button>
-                <button class="preset-btn" data-capital="100000">$100K</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Contributions Card -->
-          <div class="card compound-card">
-            <div class="card__header">
-              <span class="card__icon">📥</span>
-              <h2 class="card__title">Contributions</h2>
-              <span class="label-optional">(optional)</span>
-            </div>
-            <div class="card__body">
-              <!-- Mode Toggle -->
-              <div class="preset-group contribution-mode-toggle" id="contributionModeToggle">
-                <button type="button" class="preset-btn" data-mode="deposits">Deposits</button>
-                <button type="button" class="preset-btn" data-mode="withdrawals">Withdrawals</button>
-                <button type="button" class="preset-btn" data-mode="both">Both</button>
-              </div>
-
-              <!-- Contribution Fields Wrapper -->
-              <div class="contribution-fields-wrapper" id="contributionFieldsWrapper" style="display: none;">
-                <!-- Deposit Fields -->
-                <div class="contribution-fields contribution-fields--deposit" id="depositFields">
-                  <label class="input-label input-label--sm">Deposit amount</label>
-                  <div class="contribution-input-row">
-                    <div class="input-wrapper input-wrapper--prefix">
-                      <span class="input-prefix">$</span>
-                      <input type="text" id="depositAmount" class="input input--mono" placeholder="0">
-                    </div>
-                    <select id="depositFrequency" class="input input--select">
-                      <option value="monthly" selected>Monthly</option>
-                      <option value="quarterly">Quarterly</option>
-                      <option value="yearly">Yearly</option>
-                    </select>
-                  </div>
-                </div>
-
-                <!-- Withdrawal Fields -->
-                <div class="contribution-fields contribution-fields--withdrawal" id="withdrawalFields">
-                  <label class="input-label input-label--sm">Withdrawal amount</label>
-                  <div class="contribution-input-row">
-                    <div class="input-wrapper input-wrapper--prefix">
-                      <span class="input-prefix">$</span>
-                      <input type="text" id="withdrawalAmount" class="input input--mono" placeholder="0">
-                    </div>
-                    <select id="withdrawalFrequency" class="input input--select">
-                      <option value="monthly" selected>Monthly</option>
-                      <option value="quarterly">Quarterly</option>
-                      <option value="yearly">Yearly</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Strategy Info Card -->
-          <div class="compound-info">
-            <p class="compound-info__text">
-              <strong>The key to compounding:</strong> cut losses quickly, let winners run, and stay consistent. 50% annually turns $10K → $576K in 10 years.
-            </p>
-          </div>
-        </aside>
-
-        <!-- Main Content -->
-        <div class="compound-main">
-          <!-- Table -->
-          <div class="compound-table-container">
-            <table class="compound-table" id="compoundTable">
-              <thead>
-                <tr>
-                  <th class="compound-th compound-th--year">Year</th>
-                  <!-- JS will populate: 10%, 20%, 30%, 40%, 50%, 60%, 70%, 80%, 90%, 100%, 150%, 200% -->
-                </tr>
-              </thead>
-              <tbody id="compoundTableBody">
-                <!-- JS will populate rows for Years 1-10 -->
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Summary Stats -->
-          <div class="compound-summary stats-grid" id="compoundSummary">
-            <!-- 4 stat cards rendered by JS -->
-          </div>
-
-          <!-- Insight Stats (click a column to update) -->
-          <div class="compound-insights stats-grid stats-grid--insights" id="compoundInsights">
-            <!-- 3 insight cards rendered by JS -->
-          </div>
-        </div>
-      </div>
-    </section>
   </div>
 
   <!-- Settings Panel (Slide-out) -->
@@ -1239,31 +578,10 @@
         <h3 class="settings-section__title">Account Defaults</h3>
 
         <div class="input-group">
-          <label class="input-label" for="settingsAccountSize">Starting Account Size</label>
+          <label class="input-label" for="settingsAccountSize">Starting Account Balance</label>
           <div class="input-wrapper input-wrapper--prefix">
             <span class="input-prefix">$</span>
             <input type="text" class="input input--mono" id="settingsAccountSize" value="10,000">
-          </div>
-          <span class="input-hint">Your baseline balance. Supports K/M notation (e.g. 50k, 1.5m)</span>
-        </div>
-
-        <div class="input-group">
-          <label class="input-label">Default Risk Per Trade</label>
-          <div class="preset-group preset-group--compact">
-            <button type="button" class="preset-btn" data-setting="defaultRisk" data-value="0.1">0.1%</button>
-            <button type="button" class="preset-btn" data-setting="defaultRisk" data-value="0.25">0.25%</button>
-            <button type="button" class="preset-btn" data-setting="defaultRisk" data-value="0.5">0.5%</button>
-            <button type="button" class="preset-btn active" data-setting="defaultRisk" data-value="1">1%</button>
-          </div>
-        </div>
-
-        <div class="input-group">
-          <label class="input-label">Default Max Position</label>
-          <div class="preset-group preset-group--compact">
-            <button type="button" class="preset-btn" data-setting="defaultMaxPos" data-value="10">10%</button>
-            <button type="button" class="preset-btn" data-setting="defaultMaxPos" data-value="20">20%</button>
-            <button type="button" class="preset-btn" data-setting="defaultMaxPos" data-value="50">50%</button>
-            <button type="button" class="preset-btn active" data-setting="defaultMaxPos" data-value="100">100%</button>
           </div>
         </div>
       </div>
@@ -1368,20 +686,6 @@
           <!-- Transaction history will be populated here -->
         </div>
       </div>
-
-      <!-- Appearance -->
-      <div class="settings-section" id="appearanceSection">
-        <h3 class="settings-section__title">Appearance</h3>
-
-        <div class="input-group">
-          <label class="input-label">Theme</label>
-          <div class="preset-group preset-group--compact">
-            <button class="preset-btn active" data-setting="theme" data-value="dark">Dark</button>
-            <button class="preset-btn" data-setting="theme" data-value="light">Light</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Price Tracking -->
       <div class="settings-section">
         <h3 class="settings-section__title">Price Tracking</h3>
@@ -1443,33 +747,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Journal Settings -->
-      <div class="settings-section" id="journalSettingsSection">
-        <h3 class="settings-section__title">Journal Settings</h3>
-
-        <label class="toggle-switch">
-          <input type="checkbox" id="wizardEnabledToggle">
-          <span class="toggle-switch__slider"></span>
-          <span class="toggle-switch__label">Enable Trade Wizard</span>
-        </label>
-        <span class="input-hint">Step-by-step guided trade logging with thesis prompts</span>
-
-        <label class="toggle-switch" style="margin-top: var(--space-3);">
-          <input type="checkbox" id="celebrationsToggle" checked>
-          <span class="toggle-switch__slider"></span>
-          <span class="toggle-switch__label">Enable Celebrations</span>
-        </label>
-        <span class="input-hint">Confetti and achievements when logging trades</span>
-
-        <label class="toggle-switch" style="margin-top: var(--space-3);">
-          <input type="checkbox" id="soundToggle">
-          <span class="toggle-switch__slider"></span>
-          <span class="toggle-switch__label">Enable Sound Effects</span>
-        </label>
-        <span class="input-hint">Premium audio feedback for actions</span>
-      </div>
-
       <!-- Data Management -->
       <div class="settings-section">
         <h3 class="settings-section__title">Data Management</h3>
@@ -1702,9 +979,9 @@
     </div>
 
     <div class="modal__footer">
-      <button class="btn btn--ghost btn--danger" id="deleteTrimTradeBtn">Delete Trade</button>
-      <div style="flex: 1;"></div>
       <button class="btn btn--ghost" id="cancelTrimBtn">Cancel</button>
+      <div style="flex: 1;"></div>
+      <button class="btn btn--ghost btn--danger" id="deleteTrimTradeBtn">Delete Trade</button>
       <button class="btn btn--success" id="confirmTrimBtn">Confirm Trim</button>
     </div>
   </div>
@@ -1713,7 +990,7 @@
   <div class="modal-overlay" id="wizardModalOverlay"></div>
   <div class="modal modal--wizard" id="wizardModal">
     <div class="modal__header">
-      <h2 class="modal__title">📝 Log Trade</h2>
+      <h2 class="modal__title">Log Trade</h2>
       <button class="icon-btn" id="closeWizardBtn" aria-label="Close wizard">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -1745,45 +1022,108 @@
       <!-- Step 1: Trade Details -->
       <div class="wizard-step active" data-step="1">
         <div class="wizard-step__header">
-          <h3 class="wizard-step__title">Ready to log this trade?</h3>
-          <p class="wizard-step__subtitle">Review your trade details</p>
+          <h3 class="wizard-step__title">Details</h3>
+          <p class="wizard-step__subtitle">Enter your position details</p>
         </div>
 
-        <div class="wizard-trade-summary">
-          <div class="wizard-ticker-input-wrapper">
-            <input type="text" class="wizard-ticker-input" id="wizardTickerInput" placeholder="TICKER" maxlength="10" autocomplete="off" spellcheck="false">
-            <span class="wizard-ticker-hint" id="wizardTickerHint">Ticker required</span>
+        <div class="wizard-step__content">
+          <div class="input-group">
+            <label class="input-label" for="wizardTicker">Ticker</label>
+            <input
+              type="text"
+              class="input input--mono input--lg"
+              id="wizardTicker"
+              placeholder="AAPL"
+              enterkeyhint="next"
+            >
           </div>
-          <div class="wizard-trade-summary__grid">
-            <div class="wizard-trade-summary__item">
-              <span class="wizard-trade-summary__label">Entry</span>
-              <span class="wizard-trade-summary__value" id="wizardEntry">$0.00</span>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label class="input-label" for="wizardEntryPrice">Entry Price</label>
+              <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
+                <span class="input-prefix">$</span>
+                <input
+                  type="text"
+                  class="input input--mono"
+                  id="wizardEntryPrice"
+                  placeholder="0.00"
+                  enterkeyhint="next"
+                >
+                <div class="input-stepper">
+                  <button type="button" class="input-stepper__btn" data-target="wizardEntryPrice" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
+                  <button type="button" class="input-stepper__btn" data-target="wizardEntryPrice" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
+                </div>
+              </div>
             </div>
-            <div class="wizard-trade-summary__item">
-              <span class="wizard-trade-summary__label">Stop</span>
-              <span class="wizard-trade-summary__value" id="wizardStop">$0.00</span>
+            <div class="input-group">
+              <label class="input-label" for="wizardStopLoss">
+                Stop Loss
+                <span class="tooltip">
+                  <span class="tooltip__icon">?</span>
+                  <span class="tooltip__content">Your exit price if the trade goes against you. Set below your entry price for long positions to limit potential losses.</span>
+                </span>
+              </label>
+              <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
+                <span class="input-prefix">$</span>
+                <input
+                  type="text"
+                  class="input input--mono"
+                  id="wizardStopLoss"
+                  placeholder="0.00"
+                  enterkeyhint="next"
+                >
+                <div class="input-stepper">
+                  <button type="button" class="input-stepper__btn" data-target="wizardStopLoss" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
+                  <button type="button" class="input-stepper__btn" data-target="wizardStopLoss" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
+                </div>
+              </div>
             </div>
-            <div class="wizard-trade-summary__item">
-              <span class="wizard-trade-summary__label">Shares</span>
-              <span class="wizard-trade-summary__value" id="wizardShares">0</span>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="wizardShares">Shares</label>
+            <input
+              type="text"
+              class="input input--mono"
+              id="wizardShares"
+              placeholder="0"
+              enterkeyhint="next"
+            >
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="wizardTargetPrice">
+              Target Price <span class="label-optional">(optional)</span>
+              <span class="tooltip">
+                <span class="tooltip__icon">?</span>
+                <span class="tooltip__content">Your profit target price. Use this to plan your risk/reward ratio before entering a trade. A good rule of thumb is targeting at least 2-3x your risk.</span>
+              </span>
+            </label>
+            <div class="input-wrapper input-wrapper--prefix">
+              <span class="input-prefix">$</span>
+              <input
+                type="text"
+                class="input input--mono input--success"
+                id="wizardTargetPrice"
+                placeholder="0.00"
+                enterkeyhint="next"
+              >
             </div>
-            <div class="wizard-trade-summary__item">
-              <span class="wizard-trade-summary__label">Position</span>
-              <span class="wizard-trade-summary__value" id="wizardPosition">$0.00</span>
-            </div>
-            <div class="wizard-trade-summary__item wizard-trade-summary__item--risk">
-              <span class="wizard-trade-summary__label">Risk</span>
-              <span class="wizard-trade-summary__value" id="wizardRisk">$0.00</span>
-            </div>
-            <div class="wizard-trade-summary__item">
-              <span class="wizard-trade-summary__label">Target</span>
-              <span class="wizard-trade-summary__value" id="wizardTarget">—</span>
-            </div>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label" for="wizardTradeDate">Trade Date</label>
+            <input
+              type="date"
+              class="input input--mono"
+              id="wizardTradeDate"
+            >
           </div>
         </div>
 
         <div class="wizard-step__actions">
-          <button class="btn btn--ghost" id="wizardSkipAll">Skip Wizard</button>
+          <button class="btn btn--ghost" id="wizardCancel1">Cancel</button>
           <button class="btn btn--primary" id="wizardNext1">Next</button>
         </div>
       </div>
@@ -1791,13 +1131,13 @@
       <!-- Step 2: Trade Thesis -->
       <div class="wizard-step" data-step="2">
         <div class="wizard-step__header">
-          <h3 class="wizard-step__title">What's your trade thesis?</h3>
-          <p class="wizard-step__subtitle">Optional but helps with analysis</p>
+          <h3 class="wizard-step__title">Strategy</h3>
+          <p class="wizard-step__subtitle">Document your thesis for this trade</p>
         </div>
 
         <div class="wizard-step__content">
           <div class="input-group">
-            <label class="input-label">Type</label>
+            <label class="input-label">Type <span class="label-optional">(optional)</span></label>
             <div class="wizard-btn-grid">
               <button class="wizard-option-btn" data-setup="ep">EP</button>
               <button class="wizard-option-btn" data-setup="long-term">Long-term</button>
@@ -1808,18 +1148,13 @@
             </div>
           </div>
 
-          <div class="input-group" style="display: none;">
-            <label class="input-label" for="wizardTheme">Theme / Sector</label>
-            <input type="text" class="input" id="wizardTheme" placeholder="e.g. AI, EV, Semis...">
-          </div>
-
           <div class="input-group">
-            <label class="input-label">Notes</label>
+            <label class="input-label">Notes <span class="label-optional">(optional)</span></label>
             <div id="wizardNotes" class="wizard-notes-editable" contenteditable="true" placeholder="Type notes..."></div>
           </div>
 
           <div class="input-group">
-            <label class="input-label">Conviction</label>
+            <label class="input-label">Conviction <span class="label-optional">(optional)</span></label>
             <div class="wizard-conviction">
               <button class="wizard-star" data-conviction="1">★</button>
               <button class="wizard-star" data-conviction="2">★</button>
@@ -1831,16 +1166,18 @@
         </div>
 
         <div class="wizard-step__actions">
-          <button class="btn btn--ghost" id="wizardBack2">Back</button>
-          <button class="btn btn--ghost" id="wizardSkip2">Skip</button>
-          <button class="btn btn--primary" id="wizardNext2">Next</button>
+          <button class="btn btn--ghost" id="wizardCancel2">Cancel</button>
+          <div style="display: flex; gap: var(--space-3);">
+            <button class="btn btn--ghost" id="wizardBack2">Back</button>
+            <button class="btn btn--primary" id="wizardNext2">Next</button>
+          </div>
         </div>
       </div>
 
       <!-- Step 3: Confirmation -->
       <div class="wizard-step" data-step="3">
         <div class="wizard-step__header">
-          <h3 class="wizard-step__title">Ready to log!</h3>
+          <h3 class="wizard-step__title">Confirm</h3>
           <p class="wizard-step__subtitle">Review and confirm your trade</p>
         </div>
 
@@ -1864,10 +1201,6 @@
               <span class="wizard-confirmation__label">Type</span>
               <span class="wizard-confirmation__value" id="wizardConfirmSetup">—</span>
             </div>
-            <div class="wizard-confirmation__row" id="wizardConfirmThemeRow" style="display: none;">
-              <span class="wizard-confirmation__label">Theme</span>
-              <span class="wizard-confirmation__value" id="wizardConfirmTheme">—</span>
-            </div>
             <div class="wizard-confirmation__row" id="wizardConfirmEntryTypeRow" style="display: none;">
               <span class="wizard-confirmation__label">Entry</span>
               <span class="wizard-confirmation__value" id="wizardConfirmEntryType">—</span>
@@ -1886,15 +1219,13 @@
         </div>
 
         <div class="wizard-step__actions">
-          <button class="btn btn--ghost" id="wizardBack3">Back</button>
-          <button class="btn btn--success btn--pulse" id="wizardConfirmBtn">✅ Log Trade</button>
+          <button class="btn btn--ghost" id="wizardCancel">Cancel</button>
+          <div style="display: flex; gap: var(--space-3);">
+            <button class="btn btn--ghost" id="wizardBack3">Back</button>
+            <button class="btn btn--success btn--pulse" id="wizardConfirmBtn">Log Trade</button>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Shift+Click hint -->
-    <div class="wizard-hint">
-      <span class="wizard-hint__text">Tip: Shift+Click "Save to Journal" to skip wizard</span>
     </div>
   </div>
 
@@ -1960,18 +1291,6 @@
   <!-- Footer -->
   <footer class="footer">
     <div class="footer__row">
-      <div class="footer__brand">
-        <a href="#" class="footer__logo">$tonk.<span class="footer__logo-highlight">Stats</span></a>
-        <span class="footer__divider">·</span>
-        <span class="footer__tagline">Study every trade you make</span>
-      </div>
-
-      <div class="footer__social">
-      </div>
-
-      <div class="footer__meta">
-        <span class="footer__copyright">© 2026 StonkStats</span>
-      </div>
     </div>
   </footer>
 

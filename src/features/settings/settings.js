@@ -79,11 +79,6 @@ class Settings {
       alphaVantageApiKey: document.getElementById('alphaVantageApiKey'),
       alphaVantageApiKeyBtn: document.getElementById('alphaVantageApiKeyBtn'),
 
-      // Journal settings
-      wizardEnabledToggle: document.getElementById('wizardEnabledToggle'),
-      celebrationsToggle: document.getElementById('celebrationsToggle'),
-      soundToggle: document.getElementById('soundToggle'),
-
       // Data management buttons
       exportDataBtn: document.getElementById('exportDataBtn'),
       importDataBtn: document.getElementById('importDataBtn'),
@@ -108,7 +103,6 @@ class Settings {
 
       // Main calculator inputs
       accountSize: document.getElementById('accountSize'),
-      maxPositionPercent: document.getElementById('maxPositionPercent'),
 
       // Header
       headerAccountValue: document.querySelector('.header__account-value')
@@ -192,27 +186,6 @@ class Settings {
     if (this.elements.dynamicAccountToggle) {
       this.elements.dynamicAccountToggle.addEventListener('change', (e) => {
         state.updateSettings({ dynamicAccountEnabled: e.target.checked });
-      });
-    }
-
-    // Wizard enabled toggle
-    if (this.elements.wizardEnabledToggle) {
-      this.elements.wizardEnabledToggle.addEventListener('change', (e) => {
-        state.updateJournalMetaSettings({ wizardEnabled: e.target.checked });
-      });
-    }
-
-    // Celebrations toggle
-    if (this.elements.celebrationsToggle) {
-      this.elements.celebrationsToggle.addEventListener('change', (e) => {
-        state.updateJournalMetaSettings({ celebrationsEnabled: e.target.checked });
-      });
-    }
-
-    // Sound toggle
-    if (this.elements.soundToggle) {
-      this.elements.soundToggle.addEventListener('change', (e) => {
-        state.updateJournalMetaSettings({ soundEnabled: e.target.checked });
       });
     }
 
@@ -325,9 +298,6 @@ class Settings {
       });
     }
 
-    // Listen for cash flow changes
-    state.on('cashFlowChanged', () => this.updateCashFlowDisplay());
-
     // Data management buttons
     if (this.elements.exportDataBtn) {
       this.elements.exportDataBtn.addEventListener('click', () => dataManager.exportAllData());
@@ -337,88 +307,6 @@ class Settings {
     }
     if (this.elements.clearDataBtn) {
       this.elements.clearDataBtn.addEventListener('click', () => clearDataModal.open());
-    }
-
-    // Settings preset buttons
-    if (this.elements.settingsPanel) {
-      this.elements.settingsPanel.addEventListener('click', (e) => this.handlePresetClick(e));
-    }
-  }
-
-  handlePresetClick(e) {
-    const btn = e.target.closest('.preset-btn[data-setting]');
-    if (!btn) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const setting = btn.dataset.setting;
-    const value = btn.dataset.value;
-    const group = btn.closest('.preset-group');
-
-    if (!setting || !value) {
-      return;
-    }
-
-    group.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    if (setting === 'defaultRisk') {
-      const riskValue = parseFloat(value);
-      state.updateSettings({ defaultRiskPercent: riskValue });
-      // Also update current account risk to match default
-      state.updateAccount({ riskPercent: riskValue });
-    } else if (setting === 'defaultMaxPos') {
-      const maxPosValue = parseFloat(value);
-      state.updateSettings({ defaultMaxPositionPercent: maxPosValue });
-      // Also update current account max position to match default
-      state.updateAccount({ maxPositionPercent: maxPosValue });
-      // Sync Quick Settings preset buttons
-      this.syncQuickSettingsMaxPositionPresets(maxPosValue);
-    } else if (setting === 'theme') {
-      document.documentElement.dataset.theme = value;
-      state.updateSettings({ theme: value });
-      localStorage.setItem('theme', value);
-    }
-  }
-
-  syncPresetButtons() {
-    // Sync defaultRisk preset buttons
-    const savedRisk = state.settings.defaultRiskPercent;
-    document.querySelectorAll('.preset-btn[data-setting="defaultRisk"]').forEach(btn => {
-      const btnValue = parseFloat(btn.dataset.value);
-      btn.classList.toggle('active', btnValue === savedRisk);
-    });
-
-    // Sync defaultMaxPos preset buttons
-    const savedMaxPos = state.settings.defaultMaxPositionPercent;
-    document.querySelectorAll('.preset-btn[data-setting="defaultMaxPos"]').forEach(btn => {
-      const btnValue = parseFloat(btn.dataset.value);
-      btn.classList.toggle('active', btnValue === savedMaxPos);
-    });
-
-    // Sync theme preset buttons
-    const savedTheme = state.settings.theme || 'dark';
-    document.querySelectorAll('.preset-btn[data-setting="theme"]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.value === savedTheme);
-    });
-  }
-
-  syncQuickSettingsMaxPositionPresets(maxPosValue) {
-    // Sync Quick Settings max position preset buttons (in .settings-grid)
-    const settingsGrid = document.querySelector('.settings-grid');
-    if (settingsGrid) {
-      const settingsItems = settingsGrid.querySelectorAll('.settings-item');
-      if (settingsItems.length >= 2) {
-        const maxPosItem = settingsItems[1]; // Second item is Max Position Size
-        const presetGroup = maxPosItem.querySelector('.preset-group');
-        if (presetGroup) {
-          presetGroup.querySelectorAll('.preset-btn').forEach(btn => {
-            const btnValue = parseFloat(btn.dataset.value);
-            btn.classList.toggle('active', btnValue === maxPosValue);
-          });
-        }
-      }
     }
   }
 
@@ -444,40 +332,10 @@ class Settings {
       this.elements.dynamicAccountToggle.checked = state.settings.dynamicAccountEnabled;
     }
 
-    // Apply journal meta settings to toggles
-    if (this.elements.wizardEnabledToggle) {
-      this.elements.wizardEnabledToggle.checked = state.journalMeta.settings.wizardEnabled || false;
-    }
-    if (this.elements.celebrationsToggle) {
-      this.elements.celebrationsToggle.checked = state.journalMeta.settings.celebrationsEnabled !== false; // Default true
-    }
-    if (this.elements.soundToggle) {
-      this.elements.soundToggle.checked = state.journalMeta.settings.soundEnabled || false;
-    }
-
-    // Apply journal settings
-    if (this.elements.wizardEnabledToggle) {
-      this.elements.wizardEnabledToggle.checked = state.journalMeta.settings.wizardEnabled || false;
-    }
-    if (this.elements.celebrationsToggle) {
-      this.elements.celebrationsToggle.checked = state.journalMeta.settings.celebrationsEnabled !== false; // Default true
-    }
-    if (this.elements.soundToggle) {
-      this.elements.soundToggle.checked = state.journalMeta.settings.soundEnabled || false;
-    }
-
     // Apply to main calculator
     if (this.elements.accountSize) {
       this.elements.accountSize.value = formatWithCommas(state.account.currentSize);
     }
-    // Risk percent is handled by buttons, not an input field
-    // Sync risk button active state (handled by calculator.syncRiskButton())
-    if (this.elements.maxPositionPercent) {
-      this.elements.maxPositionPercent.value = state.settings.defaultMaxPositionPercent;
-    }
-
-    // Sync preset button active states to match loaded settings
-    this.syncPresetButtons();
 
     // Load API keys
     const finnhubKey = localStorage.getItem('finnhubApiKey') || '';

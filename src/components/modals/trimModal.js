@@ -27,6 +27,7 @@ class TrimModal {
       closeBtn: document.getElementById('closeTrimModalBtn'),
       cancelBtn: document.getElementById('cancelTrimBtn'),
       confirmBtn: document.getElementById('confirmTrimBtn'),
+      deleteBtn: document.getElementById('deleteTrimTradeBtn'),
       ticker: document.getElementById('trimModalTicker'),
       entryPrice: document.getElementById('trimEntryPrice'),
       originalStop: document.getElementById('trimOriginalStop'),
@@ -92,6 +93,14 @@ class TrimModal {
     this.elements.closeBtn?.addEventListener('click', () => this.close());
     this.elements.cancelBtn?.addEventListener('click', () => this.close());
     this.elements.overlay?.addEventListener('click', () => this.close());
+
+    // Delete trade button
+    this.elements.deleteBtn?.addEventListener('click', () => {
+      if (this.currentTrade && window.deleteTrade) {
+        window.deleteTrade(this.currentTrade.id);
+        this.close();
+      }
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.isOpen()) this.close();

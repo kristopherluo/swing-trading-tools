@@ -73,7 +73,7 @@ class JournalView {
 
       // Empty state
       empty: document.getElementById('journalEmpty'),
-      goToDashboard: document.getElementById('journalGoToDashboard'),
+      openWizardBtn: document.getElementById('journalNewBtn'),
 
       // Export buttons
       exportCSV: document.getElementById('journalExportCSV'),
@@ -97,10 +97,10 @@ class JournalView {
   }
 
   bindEvents() {
-    // Go to dashboard button
-    if (this.elements.goToDashboard) {
-      this.elements.goToDashboard.addEventListener('click', () => {
-        viewManager.navigateTo('dashboard');
+    // Open wizard button
+    if (this.elements.openWizardBtn) {
+      this.elements.openWizardBtn.addEventListener('click', () => {
+        wizard.open();
       });
     }
 
@@ -730,15 +730,10 @@ class JournalView {
       const isTrimmed = trade.status === 'trimmed';
       const realizedPnL = trade.totalRealizedPnL || 0;
       const currentRisk = shares * (trade.entry - trade.stop);
-      const isFreeRoll = isTrimmed && realizedPnL >= (currentRisk - 0.01);
 
       // Determine display status
       let statusClass = trade.status;
       let statusText = trade.status.charAt(0).toUpperCase() + trade.status.slice(1);
-      if (isFreeRoll) {
-        statusClass = 'freeroll';
-        statusText = 'Free Rolled';
-      }
 
       const isExpanded = this.expandedRows.has(trade.id);
       const animationDelay = shouldAnimate ? `animation-delay: ${index * 40}ms;` : '';

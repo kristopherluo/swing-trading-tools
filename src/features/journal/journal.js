@@ -47,7 +47,7 @@ class Journal {
 
     // Listen for view changes to reset animation
     state.on('viewChanged', (data) => {
-      if (data.to === 'dashboard') {
+      if (data.to === 'positions') {
         this.hasAnimated = false;
       }
     });
@@ -404,12 +404,8 @@ class Journal {
       const realizedPnL = trade.totalRealizedPnL || 0;
       const target5R = trade.entry + (5 * riskPerShare);
 
-      // Check if trade is "free rolled" - realized profit covers remaining risk
-      // Use small tolerance for floating point comparison
-      const isFreeRoll = isTrimmed && realizedPnL >= (currentRisk - 0.01);
-
       // For trimmed trades, calculate NET risk (remaining risk - realized profit)
-      // Net risk can't go below 0 (that's when it becomes "free roll")
+      // Net risk can't go below 0
       const netRisk = isTrimmed ? Math.max(0, currentRisk - realizedPnL) : currentRisk;
 
       // Calculate risk percentage and color based on net risk
@@ -425,10 +421,7 @@ class Journal {
 
       // Determine status badge
       let statusClass, statusText;
-      if (isFreeRoll) {
-        statusClass = 'freeroll';
-        statusText = 'Free Rolled';
-      } else if (isTrimmed) {
+      if (isTrimmed) {
         statusClass = 'trimmed';
         statusText = 'Trimmed';
       } else {

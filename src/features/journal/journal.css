@@ -304,11 +304,6 @@
   background: var(--bg-elevated);
 }
 
-.journal-table__status--freeroll {
-  color: var(--primary);
-  background: var(--primary-muted);
-}
-
 /* Breakeven Tag */
 .tag {
   display: inline-flex;

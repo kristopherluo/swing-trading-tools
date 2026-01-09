@@ -38,14 +38,18 @@
 }
 
 .btn--primary {
-  color: white;
-  background: var(--primary);
-  border-color: var(--primary);
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1.5px solid rgba(96, 165, 250, 0.4);
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.2), inset 0 0 8px rgba(96, 165, 250, 0.1);
 }
 
 .btn--primary:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.7);
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.8);
+  box-shadow: 0 0 16px rgba(96, 165, 250, 0.4), inset 0 0 12px rgba(96, 165, 250, 0.15);
 }
 
 .btn--success {
@@ -68,7 +72,13 @@
 
 .btn--secondary {
   background: var(--bg-surface);
-  border-color: var(--border-default);
+  border: 1.5px solid rgba(96, 165, 250, 0.25);
+  box-shadow: 0 0 6px rgba(96, 165, 250, 0.1);
+}
+
+.btn--secondary:hover {
+  border-color: rgba(96, 165, 250, 0.4);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.2);
 }
 
 .btn--ghost {
@@ -103,18 +113,20 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  color: var(--text-secondary);
+  color: #60a5fa;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--border-radius);
   cursor: pointer;
   transition: all var(--transition-fast);
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.5));
 }
 
 .icon-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-  border-color: var(--border-subtle);
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+  border-color: rgba(96, 165, 250, 0.5);
+  filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.8)) drop-shadow(0 0 20px rgba(96, 165, 250, 0.4));
 }
 
 .icon-btn:focus {

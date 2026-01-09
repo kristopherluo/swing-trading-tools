@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(powershell -Command \"\\(Get-Content ''index.html'' -Raw\\) -replace ''\\(?s\\)      <!-- Dashboard Header -->.*?    </main>\\\\r?\\\\n'', '''' | Set-Content ''index.html'' -NoNewline\")",
+      "Bash(python:*)"
     ]
   }
 }

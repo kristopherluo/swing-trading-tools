@@ -6,13 +6,11 @@ import { state } from '../../core/state.js';
 
 class ViewManager {
   constructor() {
-    this.currentView = 'dashboard';
+    this.currentView = 'positions';
     this.views = {
-      dashboard: null,
       positions: null,
       journal: null,
-      stats: null,
-      compound: null
+      stats: null
     };
     this.navElement = null;
     this.navButtons = null;
@@ -23,25 +21,23 @@ class ViewManager {
 
   init() {
     // Get DOM elements for all views
-    this.views.dashboard = document.querySelector('.main');
     this.views.positions = document.getElementById('positionsView');
     this.views.journal = document.getElementById('journalView');
     this.views.stats = document.getElementById('statsView');
-    this.views.compound = document.getElementById('compoundView');
     this.navElement = document.getElementById('viewNav');
     this.navButtons = document.querySelectorAll('.view-nav__btn');
     this.mobileNavTrigger = document.getElementById('mobileNavTrigger');
     this.mobileNavBackdrop = document.getElementById('mobileNavBackdrop');
 
-    if (!this.views.dashboard) {
-      console.warn('ViewManager: Dashboard element not found');
+    if (!this.views.positions) {
+      console.warn('ViewManager: Positions element not found');
       return;
     }
 
-    // Set initial state - dashboard visible, others hidden
+    // Set initial state - positions visible, others hidden
     Object.entries(this.views).forEach(([name, el]) => {
       if (!el) return;
-      if (name === 'dashboard') {
+      if (name === 'positions') {
         el.classList.add('view--active');
         el.classList.remove('view--hidden');
       } else {
@@ -121,10 +117,10 @@ class ViewManager {
     // Handle URL hash on load
     this.initDeepLink();
 
-    // Keyboard shortcuts: Cmd/Ctrl + 1-5 for direct navigation
+    // Keyboard shortcuts: Cmd/Ctrl + 1-3 for direct navigation
     document.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey) {
-        const viewMap = { '1': 'dashboard', '2': 'positions', '3': 'journal', '4': 'stats', '5': 'compound' };
+        const viewMap = { '1': 'positions', '2': 'journal', '3': 'stats' };
         if (viewMap[e.key]) {
           e.preventDefault();
           this.switchTo(viewMap[e.key]);
@@ -238,8 +234,8 @@ class ViewManager {
   }
 
   toggle() {
-    // Cycle through views: dashboard → positions → journal → stats → compound
-    const viewOrder = ['dashboard', 'positions', 'journal', 'stats', 'compound'];
+    // Cycle through views: positions → journal → stats
+    const viewOrder = ['positions', 'journal', 'stats'];
     const currentIndex = viewOrder.indexOf(this.currentView);
     const nextIndex = (currentIndex + 1) % viewOrder.length;
     this.switchTo(viewOrder[nextIndex]);
@@ -249,20 +245,12 @@ class ViewManager {
     return this.currentView === 'stats';
   }
 
-  isDashboardView() {
-    return this.currentView === 'dashboard';
-  }
-
   isPositionsView() {
     return this.currentView === 'positions';
   }
 
   isJournalView() {
     return this.currentView === 'journal';
-  }
-
-  isCompoundView() {
-    return this.currentView === 'compound';
   }
 
   // Navigate to a specific view (for use by other modules)
