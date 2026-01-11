@@ -9,6 +9,8 @@ import { wizard } from '../../components/modals/wizard.js';
 import { viewManager } from '../../components/ui/viewManager.js';
 import { priceTracker } from '../../core/priceTracker.js';
 import { showToast } from '../../components/ui/ui.js';
+import { sharedMetrics } from '../../shared/SharedMetrics.js';
+import { FilterPopup } from '../../shared/FilterPopup.js';
 
 class PositionsView {
   constructor() {
@@ -17,12 +19,30 @@ class PositionsView {
       status: 'all',
       types: ['ep', 'long-term', 'base', 'breakout', 'bounce', 'other'] // Default to all types selected
     };
+    this.filterPopup = null; // Shared filter popup component
     this.autoRefreshInterval = null;
     this.hasAnimated = false;
   }
 
   init() {
     this.cacheElements();
+
+    // Initialize shared filter popup
+    this.filterPopup = new FilterPopup({
+      elements: {
+        filterBtn: this.elements.filterBtn,
+        filterPanel: this.elements.filterPanel,
+        filterBackdrop: this.elements.filterBackdrop,
+        filterClose: this.elements.filterClose,
+        applyBtn: this.elements.applyFilters,
+        resetBtn: this.elements.selectAllTypes,
+        filterCount: this.elements.filterCount
+      },
+      onOpen: () => this.syncFilterUIToState(),
+      onApply: () => this.applyFilters(),
+      onReset: () => this.selectAllTypes()
+    });
+
     this.bindEvents();
 
     // Initialize all type checkboxes to be checked (matching "All Types" default state)
@@ -120,27 +140,7 @@ class PositionsView {
       });
     }
 
-    // Filter dropdown
-    if (this.elements.filterBtn) {
-      this.elements.filterBtn.addEventListener('click', () => this.toggleFilterPanel());
-    }
-
-    if (this.elements.filterClose) {
-      this.elements.filterClose.addEventListener('click', () => this.closeFilterPanel());
-    }
-
-    if (this.elements.applyFilters) {
-      this.elements.applyFilters.addEventListener('click', () => this.applyFilters());
-    }
-
-    if (this.elements.selectAllTypes) {
-      this.elements.selectAllTypes.addEventListener('click', () => this.selectAllTypes());
-    }
-
-    // Close panel when clicking backdrop
-    if (this.elements.filterBackdrop) {
-      this.elements.filterBackdrop.addEventListener('click', () => this.closeFilterPanel());
-    }
+    // Note: Filter popup open/close/apply/reset now handled by shared FilterPopup component
 
     // Status buttons
     if (this.elements.statusBtns) {
@@ -176,44 +176,10 @@ class PositionsView {
       });
     });
 
-    // Close panel when clicking outside
-    document.addEventListener('click', (e) => {
-      if (this.elements.filterPanel?.classList.contains('open')) {
-        const isClickInside = this.elements.filterBtn?.contains(e.target) ||
-                             this.elements.filterPanel?.contains(e.target);
-        if (!isClickInside) {
-          this.closeFilterPanel();
-        }
-      }
-    });
+    // Note: Click outside to close handled by shared FilterPopup component
   }
 
-  toggleFilterPanel() {
-    const isOpen = this.elements.filterPanel?.classList.contains('open');
-    if (isOpen) {
-      this.closeFilterPanel();
-    } else {
-      this.openFilterPanel();
-    }
-  }
-
-  openFilterPanel() {
-    // Restore UI to match current applied filters
-    this.syncFilterUIToState();
-
-    this.elements.filterPanel?.classList.add('open');
-    this.elements.filterBtn?.classList.add('open');
-    this.elements.filterBackdrop?.classList.add('open');
-  }
-
-  closeFilterPanel() {
-    // Restore UI to last applied state when closing without applying
-    this.syncFilterUIToState();
-
-    this.elements.filterPanel?.classList.remove('open');
-    this.elements.filterBtn?.classList.remove('open');
-    this.elements.filterBackdrop?.classList.remove('open');
-  }
+  // Note: toggleFilterPanel, openFilterPanel, closeFilterPanel now handled by shared FilterPopup component
 
   syncFilterUIToState() {
     // Sync status buttons to current filter state
@@ -268,8 +234,7 @@ class PositionsView {
     // Reset animation flag to re-animate filtered cards
     this.hasAnimated = false;
 
-    // Close panel and render
-    this.closeFilterPanel();
+    // Render (FilterPopup handles closing)
     this.render();
   }
 
@@ -308,13 +273,8 @@ class PositionsView {
       count += selectedTypes;
     }
 
-    // Update badge
-    if (count > 0) {
-      this.elements.filterCount.textContent = count;
-      this.elements.filterCount.style.display = 'inline-flex';
-    } else {
-      this.elements.filterCount.style.display = 'none';
-    }
+    // Update badge using shared FilterPopup
+    this.filterPopup.updateFilterCount(count);
   }
 
   getFilteredPositions() {
@@ -423,19 +383,8 @@ class PositionsView {
       return;
     }
 
-    // Calculate NET risk (remaining risk minus realized profit for trimmed trades)
-    const totalRisk = activeTrades.reduce((sum, t) => {
-      const shares = t.remainingShares ?? t.shares;
-      const riskPerShare = t.entry - t.stop;
-      const grossRisk = shares * riskPerShare;
-
-      // For trimmed trades, subtract realized profit (net risk can't go below 0)
-      const realizedPnL = t.totalRealizedPnL || 0;
-      const isTrimmed = t.status === 'trimmed';
-      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
-
-      return sum + netRisk;
-    }, 0);
+    // Calculate NET risk using SharedMetrics (same calculation as Stats page!)
+    const totalRisk = sharedMetrics.getOpenRisk();
 
     // Calculate total unrealized P&L
     const pnlData = priceTracker.calculateTotalUnrealizedPnL(activeTrades);

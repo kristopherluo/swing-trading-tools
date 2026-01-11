@@ -80,6 +80,12 @@ class AppState {
         alertExpanded: false,
         settingsOpen: false,
         journalOpen: false
+      },
+
+      // Shared metrics (calculated once, used across multiple pages)
+      metrics: {
+        openRisk: 0,
+        lastCalculated: null
       }
     };
 

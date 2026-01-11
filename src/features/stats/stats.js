@@ -1,23 +1,28 @@
 /**
- * Stats - Trading statistics calculations and DOM rendering
+ * Stats - Trading statistics UI and rendering
+ * REFACTORED: Uses modular calculators, ~300 lines vs 1300 lines
  */
 
 import { state } from '../../core/state.js';
-import { priceTracker } from '../../core/priceTracker.js';
-import { historicalPrices } from '../../core/historicalPrices.js';
 import { showToast } from '../../components/ui/ui.js';
-import { initFlatpickr, getPreviousBusinessDay, getCurrentWeekday } from '../../core/utils.js';
+import { initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
+import { StatsCalculator } from './StatsCalculator.js';
+import { equityCurveManager } from './EquityCurveManager.js';
+import { DateRangeFilter } from '../../shared/DateRangeFilter.js';
+import { FilterPopup } from '../../shared/FilterPopup.js';
+import { sharedMetrics } from '../../shared/SharedMetrics.js';
+import { EquityChart } from './statsChart.js';
 
 class Stats {
   constructor() {
     this.elements = {};
     this.stats = {};
-    this.filters = {
-      dateFrom: null,
-      dateTo: null
-    };
+    this.filters = new DateRangeFilter();
+    this.calculator = new StatsCalculator();
+    this.chart = null;
     this.isCalculating = false;
-    this.historicalPricesFetched = false;
+    this.filterPopup = null; // Shared filter popup component
+
     // Store flatpickr instances
     this.dateFromPicker = null;
     this.dateToPicker = null;
@@ -45,6 +50,7 @@ class Stats {
       totalGrowth: document.getElementById('statTotalGrowth'),
       totalGrowthCard: document.getElementById('statTotalGrowthCard'),
       cashFlow: document.getElementById('statCashFlow'),
+      cashFlowCard: document.getElementById('statCashFlowCard'),
 
       // Chart
       chartValue: document.getElementById('statChartValue'),
@@ -64,51 +70,86 @@ class Stats {
       datePresetBtns: document.querySelectorAll('#statsFilterPanel .filter-preset-btn')
     };
 
-    // Listen for journal changes
-    state.on('journalEntryAdded', () => this.refresh());
-    state.on('journalEntryUpdated', () => this.refresh());
-    state.on('journalEntryDeleted', () => this.refresh());
-    state.on('accountSizeChanged', () => this.refresh());
-    state.on('cashFlowChanged', () => this.refresh());
-    state.on('settingsChanged', () => this.refresh());
-    state.on('pricesUpdated', () => this.refresh());
+    // Initialize equity chart
+    this.chart = new EquityChart();
+    this.chart.init();
+
+    // Listen for journal changes - invalidate equity curve cache
+    state.on('journalEntryAdded', () => {
+      equityCurveManager.invalidateCache();
+      sharedMetrics.recalculateAll();
+      this.refresh();
+    });
+    state.on('journalEntryUpdated', () => {
+      equityCurveManager.invalidateCache();
+      sharedMetrics.recalculateAll();
+      this.refresh();
+    });
+    state.on('journalEntryDeleted', () => {
+      equityCurveManager.invalidateCache();
+      sharedMetrics.recalculateAll();
+      this.refresh();
+    });
+    state.on('accountSizeChanged', () => {
+      equityCurveManager.invalidateCache();
+      this.refresh();
+    });
+    state.on('cashFlowChanged', () => {
+      equityCurveManager.invalidateCache();
+      this.refresh();
+    });
+    state.on('settingsChanged', () => {
+      equityCurveManager.invalidateCache();
+      this.refresh();
+    });
+    state.on('pricesUpdated', () => {
+      sharedMetrics.recalculateAll();
+      this.refresh();
+    });
     state.on('viewChanged', (data) => {
       if (data.to === 'stats') {
         this.refresh();
-        // Animate stat cards on view load
         this.animateStatCards();
       }
     });
 
-    // Disable weekends on date inputs (must be done before binding events)
-    this.disableWeekends();
+    // Initialize date pickers
+    this.initializeDatePickers();
 
-    // Bind filter event handlers
-    this.bindFilterEvents();
+    // Initialize shared filter popup
+    this.filterPopup = new FilterPopup({
+      elements: {
+        filterBtn: this.elements.filterBtn,
+        filterPanel: this.elements.filterPanel,
+        filterBackdrop: this.elements.filterBackdrop,
+        filterClose: this.elements.filterClose,
+        applyBtn: this.elements.applyFilters,
+        resetBtn: this.elements.clearFilters,
+        filterCount: this.elements.filterCount
+      },
+      onOpen: () => this.onFilterOpen(),
+      onApply: () => this.applyFilters(),
+      onReset: () => this.clearFilters()
+    });
 
-    // Initialize Max preset dates (earliest trade to today)
+    // Bind date preset buttons and input change handlers
+    this.bindDateFilterEvents();
+
+    // Initialize Max preset dates
     this.handleDatePreset('max');
 
-    // Apply the Max preset to filters so date range indicator updates
-    const dateFrom = this.dateFromPicker?.input?.value || null;
-    const dateTo = this.dateToPicker?.input?.value || null;
-    if (dateFrom && dateTo) {
-      this.filters.dateFrom = dateFrom;
-      this.filters.dateTo = dateTo;
-    }
-
-    // Initial calculation
+    // Initial calculation and render
     this.refresh();
 
-    // Trigger animation on initial page load if stats view is active
+    // Animate on load if stats view is active
     const statsView = document.getElementById('statsView');
     if (statsView && statsView.classList.contains('view--active')) {
       setTimeout(() => this.animateStatCards(), 100);
     }
   }
 
-  disableWeekends() {
-    // Calculate earliest trade date
+  initializeDatePickers() {
+    // Calculate earliest trade date for minDate constraint
     const allTrades = state.journal.entries;
     let minDate = null;
 
@@ -119,17 +160,403 @@ class Stats {
 
       if (datesWithTrades.length > 0) {
         minDate = new Date(Math.min(...datesWithTrades));
+        // IMPORTANT: Set to start of day (midnight) to avoid time component issues
+        minDate.setHours(0, 0, 0, 0);
       }
     }
 
-    // Initialize flatpickr on filter date inputs with minDate constraint
     const options = minDate ? { minDate: minDate } : {};
     this.dateFromPicker = initFlatpickr(this.elements.dateFrom, options);
     this.dateToPicker = initFlatpickr(this.elements.dateTo, options);
   }
 
+  bindDateFilterEvents() {
+    // Date preset buttons
+    this.elements.datePresetBtns?.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const range = btn.dataset.range;
+        this.handleDatePreset(range);
+      });
+    });
+
+    // Handle Enter key in date inputs
+    this.elements.dateFrom?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.applyFilters();
+        this.filterPopup.close();
+      }
+    });
+    this.elements.dateTo?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.applyFilters();
+        this.filterPopup.close();
+      }
+    });
+
+    // Date input changes - remove preset styling
+    this.elements.dateFrom?.addEventListener('change', () => {
+      this.elements.dateFrom.classList.remove('preset-value');
+      this.elements.dateTo?.classList.remove('preset-value');
+      this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+    });
+    this.elements.dateTo?.addEventListener('change', () => {
+      this.elements.dateFrom?.classList.remove('preset-value');
+      this.elements.dateTo.classList.remove('preset-value');
+      this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+    });
+  }
+
+  onFilterOpen() {
+    // Sync UI to current filter state when opening popup
+    this.filters.syncFilterUIToState(this.elements, this.elements.datePresetBtns);
+  }
+
+  handleDatePreset(range) {
+    // Clear active state from all preset buttons
+    this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
+
+    // Set active state on clicked button
+    const clickedBtn = Array.from(this.elements.datePresetBtns || []).find(
+      btn => btn.dataset.range === range
+    );
+    clickedBtn?.classList.add('active');
+
+    // Get dates from filter handler (uses working journal logic)
+    const dates = this.filters.handleDatePreset(range);
+
+    // Set date inputs using flatpickr
+    if (this.dateFromPicker && dates.dateFrom) {
+      const [year, month, day] = dates.dateFrom.split('-').map(Number);
+      const fromDate = new Date(year, month - 1, day);
+      this.dateFromPicker.setDate(fromDate);
+      this.elements.dateFrom?.classList.add('preset-value');
+    }
+
+    if (this.dateToPicker && dates.dateTo) {
+      const [year, month, day] = dates.dateTo.split('-').map(Number);
+      const toDate = new Date(year, month - 1, day);
+      this.dateToPicker.setDate(toDate);
+      this.elements.dateTo?.classList.add('preset-value');
+    }
+
+    // Store filter state so it's applied immediately
+    this.filters.setFilter(dates.dateFrom, dates.dateTo);
+
+    // Update filter count badge (0 if Max preset, 1 otherwise)
+    const hasFilters = !this.filters.isMaxPreset();
+    this.filterPopup.updateFilterCount(hasFilters ? 1 : 0);
+  }
+
+  applyFilters() {
+    const dateFrom = this.elements.dateFrom?.value || null;
+    const dateTo = this.elements.dateTo?.value || null;
+
+    // Validation: start date must be before or equal to end date
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      showToast('Start date must be before end date', 'error');
+      return;
+    }
+
+    // Validation: dates can't be in the future
+    const today = getCurrentWeekday();
+    const todayStr = this.formatDateLocal(today);
+    if ((dateFrom && dateFrom > todayStr) || (dateTo && dateTo > todayStr)) {
+      showToast('Dates cannot be in the future', 'error');
+      return;
+    }
+
+    // Update filters
+    this.filters.setFilter(dateFrom, dateTo);
+
+    // Update filter count badge (0 to hide, 1 if date filter active AND not Max preset)
+    const hasFilters = (dateFrom || dateTo) && !this.filters.isMaxPreset();
+    this.filterPopup.updateFilterCount(hasFilters ? 1 : 0);
+
+    // Refresh (FilterPopup handles closing)
+    this.refresh();
+  }
+
+  clearFilters() {
+    this.filters.clearFilters();
+
+    // Clear date pickers
+    this.dateFromPicker?.clear();
+    this.dateToPicker?.clear();
+
+    // Reset to Max preset
+    this.handleDatePreset('max');
+
+    // Update filter count badge
+    this.filterPopup.updateFilterCount(0);
+
+    // Don't close panel - let user continue adjusting filters
+    // (matches behavior of journal and positions pages)
+  }
+
+  async refresh() {
+    if (this.isCalculating) return;
+
+    this.isCalculating = true;
+    this.showLoadingState(true);
+
+    try {
+      await this.calculate();
+      this.render();
+      await this.renderEquityCurve();
+    } catch (error) {
+      console.error('Error refreshing stats:', error);
+      showToast('Error calculating stats', 'error');
+    } finally {
+      this.showLoadingState(false);
+      this.isCalculating = false;
+    }
+  }
+
+  async calculate() {
+    const allEntries = state.journal.entries;
+    const filterState = this.filters.getActiveFilter();
+
+    // Build equity curve FIRST to ensure cache is up to date for P&L calculation
+    await equityCurveManager.buildEquityCurve(filterState.dateFrom, filterState.dateTo);
+
+    // Get filtered trades
+    const filteredTrades = this.filters.getFilteredTrades(allEntries);
+
+    // Calculate all metrics using new modular calculators
+    const currentAccount = this.calculator.calculateCurrentAccount();
+    const openRisk = sharedMetrics.getOpenRisk(); // Shared with Positions page!
+    const realizedPnL = this.calculator.calculateRealizedPnL(filteredTrades);
+    const winsLosses = this.calculator.calculateWinsLosses(filteredTrades);
+    const winRate = this.calculator.calculateWinRate(filteredTrades);
+    const sharpe = this.calculator.calculateSharpeRatio(filteredTrades);
+    const netCashFlow = this.calculator.calculateNetCashFlow(filterState.dateFrom, filterState.dateTo);
+
+    // Calculate deposits and withdrawals separately for breakdown display
+    const cashFlowTransactions = state.cashFlow?.transactions || [];
+    const filteredTransactions = filterState.dateFrom || filterState.dateTo
+      ? cashFlowTransactions.filter(tx => {
+          const txDate = new Date(tx.timestamp);
+          txDate.setHours(0, 0, 0, 0);
+          const txDateStr = this.formatDateLocal(txDate);
+
+          let inRange = true;
+          if (filterState.dateFrom) {
+            inRange = inRange && txDateStr >= filterState.dateFrom;
+          }
+          if (filterState.dateTo) {
+            inRange = inRange && txDateStr <= filterState.dateTo;
+          }
+          return inRange;
+        })
+      : cashFlowTransactions;
+
+    const deposits = filteredTransactions
+      .filter(tx => tx.type === 'deposit')
+      .reduce((sum, tx) => sum + tx.amount, 0);
+
+    const withdrawals = filteredTransactions
+      .filter(tx => tx.type === 'withdrawal')
+      .reduce((sum, tx) => sum + tx.amount, 0);
+
+    // Calculate P&L using NEW simplified approach (equity curve lookup)
+    const pnlResult = this.calculator.calculatePnL(filterState.dateFrom, filterState.dateTo);
+
+    // Calculate percentages
+    const tradingGrowth = pnlResult.startingBalance > 0
+      ? (pnlResult.pnl / pnlResult.startingBalance) * 100
+      : 0;
+
+    const totalGrowth = pnlResult.startingBalance > 0
+      ? ((pnlResult.pnl + netCashFlow) / pnlResult.startingBalance) * 100
+      : 0;
+
+    // Store results
+    this.stats = {
+      currentAccount,
+      openRisk,
+      realizedPnL,
+      wins: winsLosses.wins,
+      losses: winsLosses.losses,
+      totalTrades: winsLosses.total,
+      winRate,
+      sharpe,
+      totalPnL: pnlResult.pnl,
+      accountAtRangeStart: pnlResult.startingBalance,
+      accountAtRangeStartDate: pnlResult.startDateStr,
+      tradingGrowth,
+      totalGrowth,
+      netCashFlow,
+      deposits,
+      withdrawals
+    };
+  }
+
+  render() {
+    const s = this.stats;
+
+    // Update date range display
+    this.updateDateRangeDisplay();
+
+    // Current Account
+    if (this.elements.openPositions) {
+      this.elements.openPositions.textContent = `$${this.formatNumber(s.currentAccount)}`;
+    }
+    if (this.elements.openRisk) {
+      this.elements.openRisk.innerHTML = `<span class="stat-card__sub--danger">$${this.formatNumber(s.openRisk)}</span> open risk`;
+    }
+
+    // Realized P&L
+    if (this.elements.totalPnL) {
+      const isPositive = s.realizedPnL >= 0;
+      this.elements.totalPnL.textContent = isPositive
+        ? `+$${this.formatNumber(Math.abs(s.realizedPnL))}`
+        : `-$${this.formatNumber(Math.abs(s.realizedPnL))}`;
+      this.elements.pnlCard?.classList.toggle('stat-card--success', isPositive && s.realizedPnL !== 0);
+      this.elements.pnlCard?.classList.toggle('stat-card--danger', !isPositive);
+    }
+    if (this.elements.pnlTrades) {
+      this.elements.pnlTrades.innerHTML = `<span class="stat-card__sub--highlight">${s.totalTrades}</span> closed trade${s.totalTrades !== 1 ? 's' : ''}`;
+    }
+
+    // Win Rate
+    if (this.elements.winRate) {
+      this.elements.winRate.textContent = s.winRate !== null ? `${s.winRate.toFixed(1)}%` : '-';
+    }
+    if (this.elements.winLoss) {
+      this.elements.winLoss.innerHTML = `<span class="stat-card__sub--success-glow">${s.wins} win${s.wins !== 1 ? 's' : ''}</span> · <span class="stat-card__sub--danger">${s.losses} loss${s.losses !== 1 ? 'es' : ''}</span>`;
+    }
+
+    // Sharpe Ratio
+    if (this.elements.sharpe) {
+      this.elements.sharpe.textContent = s.sharpe !== null ? s.sharpe.toFixed(2) : '-';
+    }
+
+    // P&L (Total with unrealized)
+    if (this.elements.currentAccount) {
+      const isPositive = s.totalPnL >= 0;
+      this.elements.currentAccount.textContent = isPositive
+        ? `+$${this.formatNumber(Math.abs(s.totalPnL))}`
+        : `-$${this.formatNumber(Math.abs(s.totalPnL))}`;
+      this.elements.currentAccountCard?.classList.toggle('stat-card--success', isPositive && s.totalPnL !== 0);
+      this.elements.currentAccountCard?.classList.toggle('stat-card--danger', !isPositive);
+    }
+    if (this.elements.accountChange) {
+      const startDate = this.formatDateDisplay(s.accountAtRangeStartDate);
+      this.elements.accountChange.innerHTML = `From starting <span class="stat-card__sub--highlight">$${this.formatNumber(s.accountAtRangeStart)}</span> on ${startDate}`;
+    }
+
+    // Trading Growth %
+    if (this.elements.tradingGrowth) {
+      const isPositive = s.tradingGrowth >= 0;
+      this.elements.tradingGrowth.textContent = isPositive
+        ? `+${s.tradingGrowth.toFixed(2)}%`
+        : `${s.tradingGrowth.toFixed(2)}%`;
+      this.elements.tradingGrowthCard?.classList.toggle('stat-card--success', isPositive && s.tradingGrowth !== 0);
+      this.elements.tradingGrowthCard?.classList.toggle('stat-card--danger', !isPositive);
+    }
+
+    // Trading Growth % subtitle
+    const tradingGrowthSub = this.elements.tradingGrowthCard?.querySelector('.stat-card__sub');
+    if (tradingGrowthSub) {
+      tradingGrowthSub.textContent = 'P&L / starting';
+    }
+
+    // Total Growth %
+    if (this.elements.totalGrowth) {
+      const isPositive = s.totalGrowth >= 0;
+      this.elements.totalGrowth.textContent = isPositive
+        ? `+${s.totalGrowth.toFixed(2)}%`
+        : `${s.totalGrowth.toFixed(2)}%`;
+      this.elements.totalGrowthCard?.classList.toggle('stat-card--success', isPositive && s.totalGrowth !== 0);
+      this.elements.totalGrowthCard?.classList.toggle('stat-card--danger', !isPositive);
+    }
+
+    // Total Growth % subtitle
+    const totalGrowthSub = this.elements.totalGrowthCard?.querySelector('.stat-card__sub');
+    if (totalGrowthSub) {
+      totalGrowthSub.textContent = '(P&L + Net Cash Flow) / starting';
+    }
+
+    // Net Cash Flow
+    if (this.elements.cashFlow) {
+      const isPositive = s.netCashFlow >= 0;
+      this.elements.cashFlow.textContent = isPositive
+        ? `+$${this.formatNumber(Math.abs(s.netCashFlow))}`
+        : `-$${this.formatNumber(Math.abs(s.netCashFlow))}`;
+      this.elements.cashFlowCard?.classList.toggle('stat-card--success', isPositive && s.netCashFlow !== 0);
+      this.elements.cashFlowCard?.classList.toggle('stat-card--danger', !isPositive);
+    }
+  }
+
+  async renderEquityCurve() {
+    if (!this.chart) {
+      console.warn('Chart not initialized');
+      return;
+    }
+
+    try {
+      // Show loading
+      if (this.elements.chartLoading) {
+        this.elements.chartLoading.style.display = 'inline-flex';
+      }
+
+      const filterState = this.filters.getActiveFilter();
+
+      // Build equity curve (uses cache if available!)
+      const curveData = await equityCurveManager.buildEquityCurve(
+        filterState.dateFrom,
+        filterState.dateTo
+      );
+
+      console.log('Equity curve data points:', curveData.length);
+
+      // Render chart
+      this.chart.setData(curveData);
+      this.chart.render();
+
+      // Update chart value display
+      if (this.elements.chartValue && curveData.length > 0) {
+        const lastPoint = curveData[curveData.length - 1];
+        this.elements.chartValue.textContent = `$${this.formatNumber(lastPoint.balance)}`;
+      }
+    } catch (error) {
+      console.error('Error rendering equity curve:', error);
+      console.error('Error stack:', error.stack);
+      showToast(`Error loading equity curve: ${error.message}`, 'error');
+    } finally {
+      // Hide loading
+      if (this.elements.chartLoading) {
+        this.elements.chartLoading.style.display = 'none';
+      }
+    }
+  }
+
+  updateDateRangeDisplay() {
+    if (!this.elements.dateRange) return;
+
+    const filterState = this.filters.getActiveFilter();
+
+    // Format dates nicely (same as journal page)
+    const formatShortDate = (dateStr) => {
+      if (!dateStr) return '';
+      // Parse YYYY-MM-DD string manually to avoid UTC timezone issues
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    if (!filterState.dateFrom && !filterState.dateTo) {
+      this.elements.dateRange.textContent = 'All time';
+    } else if (filterState.dateFrom && filterState.dateTo) {
+      this.elements.dateRange.textContent = `${formatShortDate(filterState.dateFrom)} - ${formatShortDate(filterState.dateTo)}`;
+    } else if (filterState.dateFrom) {
+      this.elements.dateRange.textContent = `From ${formatShortDate(filterState.dateFrom)}`;
+    } else {
+      this.elements.dateRange.textContent = `Until ${formatShortDate(filterState.dateTo)}`;
+    }
+  }
+
   showLoadingState(show) {
-    // Cards that need loading indicators when fetching historical prices
     const cardsToLoad = [
       this.elements.currentAccountCard,
       this.elements.pnlCard,
@@ -141,7 +568,6 @@ class Stats {
       if (!card) return;
 
       if (show) {
-        // Add loading spinner if not already present
         if (!card.querySelector('.stat-card-loading')) {
           const spinner = document.createElement('div');
           spinner.className = 'stat-card-loading';
@@ -154,7 +580,6 @@ class Stats {
           card.appendChild(spinner);
         }
       } else {
-        // Remove loading spinner
         const spinner = card.querySelector('.stat-card-loading');
         if (spinner) {
           spinner.remove();
@@ -164,10 +589,8 @@ class Stats {
   }
 
   animateStatCards() {
-    // Get all stat sections (each contains either a grid or chart)
     const statsSections = document.querySelectorAll('.stats-view .stats-section');
 
-    // Remove any existing animate classes
     statsSections.forEach(section => {
       const cards = section.querySelectorAll('.stat-card');
       const chart = section.querySelector('.stats-chart');
@@ -181,16 +604,13 @@ class Stats {
       }
     });
 
-    // Force a reflow to ensure removal is applied
     void document.body.offsetHeight;
 
-    // Animate row by row after a brief delay
     setTimeout(() => {
       statsSections.forEach((section, sectionIndex) => {
         const cards = section.querySelectorAll('.stat-card');
         const chart = section.querySelector('.stats-chart');
 
-        // For stat cards (rows 1 and 2)
         if (cards.length > 0) {
           cards.forEach((card, cardIndex) => {
             const totalIndex = (sectionIndex * 4) + cardIndex;
@@ -199,768 +619,13 @@ class Stats {
           });
         }
 
-        // For equity curve chart (last)
         if (chart) {
-          const totalCards = Array.from(document.querySelectorAll('.stats-view .stat-card')).length;
-          chart.style.animationDelay = `${totalCards * 80}ms`;
+          const totalIndex = sectionIndex * 4;
+          chart.style.animationDelay = `${totalIndex * 80}ms`;
           chart.classList.add('stats-chart--animate');
         }
       });
     }, 50);
-  }
-
-  bindFilterEvents() {
-    // Filter dropdown
-    if (this.elements.filterBtn) {
-      this.elements.filterBtn.addEventListener('click', () => this.toggleFilterPanel());
-    }
-
-    if (this.elements.filterClose) {
-      this.elements.filterClose.addEventListener('click', () => this.closeFilterPanel());
-    }
-
-    if (this.elements.applyFilters) {
-      this.elements.applyFilters.addEventListener('click', () => this.applyFilters());
-    }
-
-    if (this.elements.clearFilters) {
-      this.elements.clearFilters.addEventListener('click', () => this.clearAllFilters());
-    }
-
-    // Filter backdrop
-    if (this.elements.filterBackdrop) {
-      this.elements.filterBackdrop.addEventListener('click', () => this.closeFilterPanel());
-    }
-
-    // Date range preset buttons
-    if (this.elements.datePresetBtns) {
-      this.elements.datePresetBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const range = e.target.dataset.range;
-          this.handleDatePreset(range);
-        });
-      });
-    }
-
-    // Date inputs - clear preset selection and styling when manually changed
-    if (this.elements.dateFrom) {
-      this.elements.dateFrom.addEventListener('change', () => {
-        this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
-        this.elements.dateFrom?.classList.remove('preset-value');
-        this.elements.dateTo?.classList.remove('preset-value');
-      });
-    }
-    if (this.elements.dateTo) {
-      this.elements.dateTo.addEventListener('change', () => {
-        this.elements.datePresetBtns?.forEach(btn => btn.classList.remove('active'));
-        this.elements.dateFrom?.classList.remove('preset-value');
-        this.elements.dateTo?.classList.remove('preset-value');
-      });
-    }
-
-    // Close panel when clicking outside
-    document.addEventListener('click', (e) => {
-      if (this.elements.filterPanel?.classList.contains('open')) {
-        const isClickInside = this.elements.filterBtn?.contains(e.target) ||
-                             this.elements.filterPanel?.contains(e.target) ||
-                             e.target.closest('.flatpickr-calendar');
-        if (!isClickInside) {
-          this.closeFilterPanel();
-        }
-      }
-    });
-  }
-
-  toggleFilterPanel() {
-    const isOpen = this.elements.filterPanel?.classList.contains('open');
-    if (isOpen) {
-      this.closeFilterPanel();
-    } else {
-      this.openFilterPanel();
-    }
-  }
-
-  openFilterPanel() {
-    // Restore UI to match current applied filters
-    this.syncFilterUIToState();
-
-    this.elements.filterPanel?.classList.add('open');
-    this.elements.filterBtn?.classList.add('open');
-    this.elements.filterBackdrop?.classList.add('open');
-  }
-
-  closeFilterPanel() {
-    // Restore UI to last applied state when closing without applying
-    this.syncFilterUIToState();
-
-    this.elements.filterPanel?.classList.remove('open');
-    this.elements.filterBtn?.classList.remove('open');
-    this.elements.filterBackdrop?.classList.remove('open');
-  }
-
-  syncFilterUIToState() {
-    // Sync date range to current filter state
-    if (this.elements.dateFrom) {
-      this.elements.dateFrom.value = this.filters.dateFrom || '';
-    }
-    if (this.elements.dateTo) {
-      this.elements.dateTo.value = this.filters.dateTo || '';
-    }
-
-    // Determine which preset button should be active
-    const hasDateFilter = this.filters.dateFrom || this.filters.dateTo;
-    if (!hasDateFilter) {
-      // "Max" (All time) preset
-      this.elements.datePresetBtns?.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.range === 'max');
-      });
-      if (this.elements.dateFrom) this.elements.dateFrom.classList.add('preset-value');
-      if (this.elements.dateTo) this.elements.dateTo.classList.add('preset-value');
-    } else {
-      // Check if current date range matches a preset
-      const matchingPreset = this.findMatchingPreset();
-      this.elements.datePresetBtns?.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.range === matchingPreset);
-      });
-    }
-  }
-
-  findMatchingPreset() {
-    if (!this.filters.dateFrom || !this.filters.dateTo) return null;
-
-    const today = getCurrentWeekday();
-    const todayStr = this.formatDateLocal(today);
-
-    // Check if dateTo is today (or close to it)
-    if (this.filters.dateTo !== todayStr) return null;
-
-    // Check for Max preset (earliest trade to today)
-    const allTrades = state.journal.entries;
-    if (allTrades && allTrades.length > 0) {
-      const datesWithTrades = allTrades
-        .filter(t => t.timestamp)
-        .map(t => new Date(t.timestamp));
-
-      if (datesWithTrades.length > 0) {
-        let earliestDate = new Date(Math.min(...datesWithTrades));
-        const dayOfWeek = earliestDate.getDay();
-        if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
-        else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
-
-        const earliestStr = this.formatDateLocal(earliestDate);
-        if (this.filters.dateFrom === earliestStr) return 'max';
-      }
-    }
-
-    // Check for YTD (Jan 1 of current year)
-    const jan1 = new Date(today.getFullYear(), 0, 1);
-    const jan1Str = this.formatDateLocal(jan1);
-    if (this.filters.dateFrom === jan1Str) return 'ytd';
-
-    // Calculate days difference from dateFrom to today
-    const [year, month, day] = this.filters.dateFrom.split('-').map(Number);
-    const fromDate = new Date(year, month - 1, day);
-    const daysDiff = Math.floor((today - fromDate) / (1000 * 60 * 60 * 24));
-
-    // Match to preset (with some tolerance for date calculation differences)
-    if (Math.abs(daysDiff - 30) <= 2) return '30';
-    if (Math.abs(daysDiff - 90) <= 2) return '90';
-    if (Math.abs(daysDiff - 365) <= 2) return '365';
-
-    return null;
-  }
-
-  handleDatePreset(range) {
-    // Update active button
-    this.elements.datePresetBtns?.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.range === range);
-    });
-
-    if (range === 'max') {
-      // Max: from earliest trade to today
-      const today = getCurrentWeekday();
-      const allTrades = state.journal.entries;
-
-      // Find earliest trade date
-      let earliestDate = today;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
-
-        if (datesWithTrades.length > 0) {
-          earliestDate = new Date(Math.min(...datesWithTrades));
-          // Adjust to previous weekday if weekend
-          const dayOfWeek = earliestDate.getDay();
-          if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
-          else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
-        }
-      }
-
-      if (this.dateFromPicker) {
-        this.dateFromPicker.setDate(earliestDate);
-        this.elements.dateFrom?.classList.add('preset-value');
-      }
-      if (this.dateToPicker) {
-        this.dateToPicker.setDate(today);
-        this.elements.dateTo?.classList.add('preset-value');
-      }
-    } else if (range === 'ytd') {
-      // Year to date: Jan 1 of current year to today (adjusted to weekday)
-      const today = getCurrentWeekday();
-      const fromDate = new Date(today.getFullYear(), 0, 1);
-
-      // Adjust fromDate to next weekday if it's a weekend
-      const fromDayOfWeek = fromDate.getDay();
-      if (fromDayOfWeek === 0) {
-        fromDate.setDate(fromDate.getDate() + 1);
-      } else if (fromDayOfWeek === 6) {
-        fromDate.setDate(fromDate.getDate() + 2);
-      }
-
-      // Don't go back before earliest trade
-      const allTrades = state.journal.entries;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
-
-        if (datesWithTrades.length > 0) {
-          const earliestDate = new Date(Math.min(...datesWithTrades));
-          if (fromDate < earliestDate) {
-            fromDate.setTime(earliestDate.getTime());
-            // Adjust to previous weekday if weekend
-            const dayOfWeek = fromDate.getDay();
-            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
-          }
-        }
-      }
-
-      if (this.dateFromPicker) {
-        this.dateFromPicker.setDate(fromDate);
-        this.elements.dateFrom?.classList.add('preset-value');
-      }
-      if (this.dateToPicker) {
-        this.dateToPicker.setDate(today);
-        this.elements.dateTo?.classList.add('preset-value');
-      }
-    } else {
-      // Calculate date range based on days (30, 90, 365)
-      const today = getCurrentWeekday();
-      const daysBack = parseInt(range);
-      const fromDate = new Date(today);
-      fromDate.setDate(today.getDate() - daysBack);
-
-      // Adjust fromDate to previous weekday if it's a weekend
-      const fromDayOfWeek = fromDate.getDay();
-      if (fromDayOfWeek === 0) {
-        fromDate.setDate(fromDate.getDate() - 2);
-      } else if (fromDayOfWeek === 6) {
-        fromDate.setDate(fromDate.getDate() - 1);
-      }
-
-      // Don't go back before earliest trade
-      const allTrades = state.journal.entries;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
-
-        if (datesWithTrades.length > 0) {
-          const earliestDate = new Date(Math.min(...datesWithTrades));
-          if (fromDate < earliestDate) {
-            fromDate.setTime(earliestDate.getTime());
-            // Adjust to previous weekday if weekend
-            const dayOfWeek = fromDate.getDay();
-            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
-          }
-        }
-      }
-
-      if (this.dateFromPicker) {
-        this.dateFromPicker.setDate(fromDate);
-        this.elements.dateFrom?.classList.add('preset-value');
-      }
-      if (this.dateToPicker) {
-        this.dateToPicker.setDate(today);
-        this.elements.dateTo?.classList.add('preset-value');
-      }
-    }
-  }
-
-  formatDateLocal(date) {
-    // Format date as YYYY-MM-DD in local timezone
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  calculateUnrealizedPnLAtDate(dateStr) {
-    // Calculate unrealized P&L for all positions open at a specific date
-    const allEntries = state.journal.entries;
-
-    // Parse date manually to avoid UTC issues
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const targetDate = new Date(year, month - 1, day);
-    targetDate.setHours(0, 0, 0, 0);
-
-    // Check if target date is today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isToday = targetDate.getTime() === today.getTime();
-
-    // Find positions that were open on this date
-    const openOnDate = allEntries.filter(e => {
-      if (!e.timestamp) return false;
-      const entryDate = new Date(e.timestamp);
-      entryDate.setHours(0, 0, 0, 0);
-      const closeDate = e.closeDate ? new Date(e.closeDate) : null;
-      if (closeDate) closeDate.setHours(0, 0, 0, 0);
-
-      // Position was open if entry <= targetDate < close (or no close yet)
-      return entryDate <= targetDate && (!closeDate || closeDate > targetDate);
-    });
-
-    // For today, use priceTracker directly to ensure consistency
-    if (isToday) {
-      const result = priceTracker.calculateTotalUnrealizedPnL(openOnDate);
-      return result?.totalPnL || 0;
-    }
-
-    // For historical dates, calculate manually using historical prices
-    let unrealizedPnL = 0;
-    openOnDate.forEach(trade => {
-      if (!trade.entry || !trade.shares) return;
-
-      // Calculate shares held on this historical date
-      let sharesOnDate = trade.shares;
-      if (trade.trimHistory && Array.isArray(trade.trimHistory)) {
-        trade.trimHistory.forEach(trim => {
-          const trimDate = new Date(trim.date);
-          trimDate.setHours(0, 0, 0, 0);
-          if (trimDate <= targetDate) {
-            sharesOnDate -= trim.shares;
-          }
-        });
-      }
-
-      if (sharesOnDate <= 0) return; // No shares held on this date
-
-      // Try to get historical price
-      let price = null;
-      const hasApiKey = historicalPrices.apiKey !== null;
-      if (hasApiKey) {
-        price = historicalPrices.getPriceOnDate(trade.ticker, dateStr);
-      }
-
-      // Fall back to current price if no historical data
-      if (!price) {
-        const result = priceTracker.calculateTotalUnrealizedPnL([trade]);
-        if (result && result.totalPnL !== undefined) {
-          // Use the per-share unrealized P&L and multiply by historical shares
-          const currentShares = trade.remainingShares ?? trade.shares;
-          if (currentShares > 0) {
-            const priceFromPnL = trade.entry + (result.totalPnL / currentShares);
-            price = priceFromPnL;
-          }
-        }
-      }
-
-      if (price) {
-        unrealizedPnL += (price - trade.entry) * sharesOnDate;
-      }
-    });
-
-    return unrealizedPnL;
-  }
-
-  applyFilters() {
-    // Get values from flatpickr instances (not from input.value)
-    let dateFrom = this.dateFromPicker?.input?.value || null;
-    let dateTo = this.dateToPicker?.input?.value || null;
-
-    // Validate date range
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      showToast('⚠️ Start date cannot be after end date', 'warning');
-      return; // Don't apply filters
-    }
-
-    // Prevent future dates
-    const today = this.formatDateLocal(new Date());
-    if ((dateFrom && dateFrom > today) || (dateTo && dateTo > today)) {
-      showToast('⚠️ Cannot select future dates', 'warning');
-      return; // Don't apply filters
-    }
-
-    // Update filter state
-    this.filters.dateFrom = dateFrom;
-    this.filters.dateTo = dateTo;
-
-    // Reset historical prices flag to trigger refetch if needed
-    this.historicalPricesFetched = false;
-
-    // Update filter count badge
-    const filterCount = (dateFrom || dateTo) ? 1 : 0;
-    if (this.elements.filterCount) {
-      if (filterCount > 0) {
-        this.elements.filterCount.textContent = filterCount;
-        this.elements.filterCount.style.display = 'inline-flex';
-      } else {
-        this.elements.filterCount.style.display = 'none';
-      }
-    }
-
-    // Close panel
-    this.closeFilterPanel();
-
-    // Re-calculate and render with filtered data
-    this.refresh();
-  }
-
-  clearAllFilters() {
-    // Reset to "Max" preset (earliest trade to today)
-    this.handleDatePreset('max');
-  }
-
-  async refresh() {
-    // Prevent multiple simultaneous calculations
-    if (this.isCalculating) return;
-
-    this.isCalculating = true;
-    this.showLoadingState(true);
-
-    try {
-      await this.calculate();
-      this.render();
-
-      // Emit event to update chart
-      state.emit('statsUpdated');
-    } finally {
-      this.isCalculating = false;
-      this.showLoadingState(false);
-    }
-  }
-
-  getFilteredTrades() {
-    let filtered = state.journal.entries;
-
-    // Filter by date range
-    if (this.filters.dateFrom || this.filters.dateTo) {
-      filtered = filtered.filter(trade => {
-        const tradeDate = new Date(trade.timestamp);
-        const tradeDateOnly = this.formatDateLocal(tradeDate);
-
-        let inRange = true;
-
-        if (this.filters.dateFrom) {
-          inRange = inRange && tradeDateOnly >= this.filters.dateFrom;
-        }
-
-        if (this.filters.dateTo) {
-          inRange = inRange && tradeDateOnly <= this.filters.dateTo;
-        }
-
-        return inRange;
-      });
-    }
-
-    return filtered;
-  }
-
-  async calculate() {
-    const filteredEntries = this.getFilteredTrades();
-    const allEntries = state.journal.entries;
-    const settings = state.settings;
-
-    // If we have date filters and need historical prices, fetch them first
-    if ((this.filters.dateFrom || this.filters.dateTo) && historicalPrices.apiKey) {
-      const allTickers = [...new Set(allEntries.map(e => e.ticker).filter(t => t))];
-
-      if (allTickers.length > 0 && !this.historicalPricesFetched) {
-        await historicalPrices.batchFetchPrices(allTickers);
-        this.historicalPricesFetched = true;
-      }
-    }
-    const startingAccount = settings.startingAccountSize;
-
-    // Calculate current account (always uses ALL trades, not filtered)
-    const allClosedTrades = allEntries.filter(e => e.status === 'closed' || e.status === 'trimmed');
-    const allTimePnL = allClosedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
-    const allOpenTrades = allEntries.filter(e => e.status === 'open' || e.status === 'trimmed');
-    const unrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
-    const allTimeCashFlow = state.getCashFlowNet();
-    const currentAccount = startingAccount + allTimePnL + (unrealizedPnL?.totalPnL || 0) + allTimeCashFlow;
-
-    // Calculate total open risk from ALL open positions (not filtered by date)
-    // Use the same NET risk calculation as positions page
-    const totalOpenRisk = allOpenTrades.reduce((sum, t) => {
-      const shares = t.remainingShares ?? t.shares;
-      const riskPerShare = t.entry - t.stop;
-      const grossRisk = shares * riskPerShare;
-
-      // For trimmed trades, subtract realized profit (net risk can't go below 0)
-      const realizedPnL = t.totalRealizedPnL || 0;
-      const isTrimmed = t.status === 'trimmed';
-      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
-
-      return sum + netRisk;
-    }, 0);
-
-    // Calculate account balance at START of date range
-    let accountAtRangeStart = startingAccount;
-    let accountAtRangeStartDate = null;
-    if (this.filters.dateFrom) {
-      // Parse date manually to avoid UTC issues
-      const [year, month, day] = this.filters.dateFrom.split('-').map(Number);
-      const rangeStartDate = new Date(year, month - 1, day);
-      rangeStartDate.setHours(0, 0, 0, 0);
-
-      // Add P&L from trades closed before range start
-      const tradesBeforeRange = allClosedTrades.filter(t => {
-        const closeDate = new Date(t.closeDate || t.timestamp);
-        closeDate.setHours(0, 0, 0, 0);
-        return closeDate < rangeStartDate;
-      });
-      const pnlBeforeRange = tradesBeforeRange.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
-
-      // Add cash flow before range start
-      const cashFlowBeforeRange = (state.cashFlow?.transactions || [])
-        .filter(tx => {
-          const txDate = new Date(tx.timestamp);
-          txDate.setHours(0, 0, 0, 0);
-          return txDate < rangeStartDate;
-        })
-        .reduce((sum, tx) => sum + (tx.type === 'deposit' ? tx.amount : -tx.amount), 0);
-
-      // Add unrealized P&L at the start of the range (previous business day before range start)
-      const previousBusinessDay = getPreviousBusinessDay(rangeStartDate);
-      const dayBeforeStart = this.formatDateLocal(previousBusinessDay);
-      const unrealizedAtStart = this.calculateUnrealizedPnLAtDate(dayBeforeStart);
-
-      accountAtRangeStart = startingAccount + pnlBeforeRange + cashFlowBeforeRange + unrealizedAtStart;
-      accountAtRangeStartDate = dayBeforeStart; // Store the date for display
-    }
-
-    // Trading Performance (uses filtered trades within date range)
-    const openTrades = filteredEntries.filter(e => e.status === 'open');
-    const openRiskTotal = openTrades.reduce((sum, t) => sum + (t.riskDollars || 0), 0);
-
-    // Closed trades within date range
-    const closedTrades = filteredEntries.filter(e => e.status === 'closed' || e.status === 'trimmed');
-    const realizedPnL = closedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
-
-    // Calculate unrealized P&L change over the date range
-    // This uses the same logic as the equity curve to account for historical prices
-    let unrealizedPnLChange = 0;
-
-    if (this.filters.dateFrom || this.filters.dateTo) {
-      // Calculate unrealized P&L at the end of the range (or today)
-      const endDate = this.filters.dateTo || this.formatDateLocal(new Date());
-      const unrealizedAtEnd = this.calculateUnrealizedPnLAtDate(endDate);
-
-      // Calculate unrealized P&L at the start of the range
-      let unrealizedAtStart = 0;
-      let startDateStr = 'beginning of time';
-      if (this.filters.dateFrom) {
-        // Get the previous business day before the range start to calculate unrealized P&L at range start
-        const [year, month, day] = this.filters.dateFrom.split('-').map(Number);
-        const startDate = new Date(year, month - 1, day);
-        const previousBusinessDay = getPreviousBusinessDay(startDate);
-        const dayBeforeStart = this.formatDateLocal(previousBusinessDay);
-        startDateStr = dayBeforeStart;
-        unrealizedAtStart = this.calculateUnrealizedPnLAtDate(dayBeforeStart);
-      }
-
-      unrealizedPnLChange = unrealizedAtEnd - unrealizedAtStart;
-    } else {
-      // No date filter - use current unrealized P&L
-      const currentUnrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
-      unrealizedPnLChange = currentUnrealizedPnL?.totalPnL || 0;
-    }
-
-    // Total P&L in date range (realized + change in unrealized)
-    const totalPnL = realizedPnL + unrealizedPnLChange;
-
-    // Win/Loss calculation
-    const wins = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) > 0);
-    const losses = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) < 0);
-    const winRate = closedTrades.length > 0
-      ? (wins.length / closedTrades.length) * 100
-      : null;
-
-    // Sharpe ratio calculation
-    const sharpe = this.calculateSharpe(closedTrades);
-
-    // Net cash flow within date range
-    let netCashFlow = 0;
-    if (this.filters.dateFrom || this.filters.dateTo) {
-      const cashFlowTransactions = state.cashFlow?.transactions || [];
-      netCashFlow = cashFlowTransactions
-        .filter(tx => {
-          const txDate = new Date(tx.timestamp);
-          const txDateStr = this.formatDateLocal(txDate);
-          let inRange = true;
-          if (this.filters.dateFrom) {
-            inRange = inRange && txDateStr >= this.filters.dateFrom;
-          }
-          if (this.filters.dateTo) {
-            inRange = inRange && txDateStr <= this.filters.dateTo;
-          }
-          return inRange;
-        })
-        .reduce((sum, tx) => sum + (tx.type === 'deposit' ? tx.amount : -tx.amount), 0);
-    } else {
-      netCashFlow = allTimeCashFlow;
-    }
-
-    // Trading Growth: (P&L within date range / account balance at start of range) × 100
-    const tradingGrowth = accountAtRangeStart > 0
-      ? (totalPnL / accountAtRangeStart) * 100
-      : 0;
-
-    // Total Growth: (P&L + cash flow within date range / account balance at start of range) × 100
-    const totalGrowth = accountAtRangeStart > 0
-      ? ((totalPnL + netCashFlow) / accountAtRangeStart) * 100
-      : 0;
-
-    this.stats = {
-      openPositions: openTrades.length,
-      openRiskTotal: totalOpenRisk,
-      closedTradeCount: closedTrades.length,
-      realizedPnL,
-      totalPnL,
-      wins: wins.length,
-      losses: losses.length,
-      winRate,
-      sharpe,
-      startingAccount,
-      currentAccount,
-      accountAtRangeStart,
-      accountAtRangeStartDate,
-      tradingGrowth,
-      totalGrowth,
-      netCashFlow
-    };
-
-    return this.stats;
-  }
-
-  calculateSharpe(closedTrades) {
-    if (closedTrades.length < 2) return null;
-
-    // Get returns as percentages
-    const returns = closedTrades.map(t => {
-      const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
-      const positionSize = t.positionSize || 1;
-      return (pnl / positionSize) * 100;
-    });
-
-    // Mean return
-    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-
-    // Standard deviation
-    const squaredDiffs = returns.map(r => Math.pow(r - mean, 2));
-    const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / returns.length;
-    const stdDev = Math.sqrt(variance);
-
-    // Sharpe ratio (simplified, no risk-free rate)
-    if (stdDev === 0) return null;
-    return mean / stdDev;
-  }
-
-  render() {
-    const s = this.stats;
-
-    // Update date range display
-    this.updateDateRangeDisplay();
-
-    // Current Account (replaces Open Positions - doesn't change with filters)
-    if (this.elements.openPositions) {
-      this.elements.openPositions.textContent = `$${this.formatNumber(s.currentAccount)}`;
-    }
-    if (this.elements.openRisk) {
-      this.elements.openRisk.innerHTML = `<span class="stat-card__sub--danger">$${this.formatNumber(s.openRiskTotal)}</span> open risk`;
-    }
-
-    // Realized P&L (filtered by date range - closed trades only)
-    if (this.elements.totalPnL) {
-      const isPositive = s.realizedPnL >= 0;
-      this.elements.totalPnL.textContent = isPositive
-        ? `+$${this.formatNumber(s.realizedPnL)}`
-        : `-$${this.formatNumber(s.realizedPnL)}`;
-      this.elements.pnlCard?.classList.toggle('stat-card--success', isPositive && s.realizedPnL !== 0);
-      this.elements.pnlCard?.classList.toggle('stat-card--danger', !isPositive);
-    }
-    if (this.elements.pnlTrades) {
-      this.elements.pnlTrades.textContent = `${s.closedTradeCount} closed trade${s.closedTradeCount !== 1 ? 's' : ''}`;
-    }
-
-    // Win Rate
-    if (this.elements.winRate) {
-      this.elements.winRate.textContent = s.winRate !== null
-        ? `${s.winRate.toFixed(1)}%`
-        : '—';
-    }
-    if (this.elements.winLoss) {
-      const winText = `${s.wins} win${s.wins !== 1 ? 's' : ''}`;
-      const lossText = `${s.losses} loss${s.losses !== 1 ? 'es' : ''}`;
-      this.elements.winLoss.innerHTML = `<span class="text-success">${winText}</span> · <span class="text-danger">${lossText}</span>`;
-    }
-
-    // Sharpe Ratio
-    if (this.elements.sharpe) {
-      this.elements.sharpe.textContent = s.sharpe !== null
-        ? s.sharpe.toFixed(2)
-        : '—';
-    }
-
-    // P&L (replaces Current Account - filtered by date range, includes unrealized)
-    if (this.elements.currentAccount) {
-      const isPositive = s.totalPnL >= 0;
-      this.elements.currentAccount.textContent = isPositive
-        ? `+$${this.formatNumber(s.totalPnL)}`
-        : `-$${this.formatNumber(s.totalPnL)}`;
-      this.elements.currentAccountCard?.classList.toggle('stat-card--success', isPositive && s.totalPnL !== 0);
-      this.elements.currentAccountCard?.classList.toggle('stat-card--danger', !isPositive);
-    }
-    if (this.elements.accountChange) {
-      let dateText = '';
-      if (s.accountAtRangeStartDate) {
-        // Format the date nicely (e.g., "Jan 4, 2025")
-        const [year, month, day] = s.accountAtRangeStartDate.split('-').map(Number);
-        const date = new Date(year, month - 1, day);
-        const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        dateText = ` <span style="color: #6b7280;">on ${formattedDate}</span>`;
-      }
-      this.elements.accountChange.innerHTML = `From starting <span style="color: white;">$${this.formatNumber(s.accountAtRangeStart)}</span>${dateText}`;
-    }
-
-    // Trading Growth (filtered by date range)
-    if (this.elements.tradingGrowth) {
-      const isPositive = s.tradingGrowth >= 0;
-      this.elements.tradingGrowth.textContent = `${isPositive ? '+' : ''}${s.tradingGrowth.toFixed(2)}%`;
-      this.elements.tradingGrowthCard?.classList.toggle('stat-card--success', isPositive && s.tradingGrowth !== 0);
-      this.elements.tradingGrowthCard?.classList.toggle('stat-card--danger', !isPositive);
-    }
-
-    // Total Growth (filtered by date range, includes cash flow)
-    if (this.elements.totalGrowth) {
-      const isPositive = s.totalGrowth >= 0;
-      this.elements.totalGrowth.textContent = `${isPositive ? '+' : ''}${s.totalGrowth.toFixed(2)}%`;
-      this.elements.totalGrowthCard?.classList.toggle('stat-card--success', isPositive && s.totalGrowth !== 0);
-      this.elements.totalGrowthCard?.classList.toggle('stat-card--danger', !isPositive);
-    }
-
-    // Net Cash Flow (filtered by date range)
-    if (this.elements.cashFlow) {
-      const isPositive = s.netCashFlow >= 0;
-      const colorClass = s.netCashFlow > 0 ? 'text-success' : (s.netCashFlow < 0 ? 'text-danger' : '');
-      this.elements.cashFlow.textContent = `${isPositive ? '+' : ''}$${this.formatNumber(s.netCashFlow)}`;
-      this.elements.cashFlow.className = `stat-card__value ${colorClass}`;
-    }
   }
 
   formatNumber(num) {
@@ -970,384 +635,24 @@ class Stats {
     });
   }
 
-  updateDateRangeDisplay() {
-    if (!this.elements.dateRange) return;
-
-    let rangeText = 'All time';
-
-    // Always show actual date range if dates are set
-    if (this.filters.dateFrom || this.filters.dateTo) {
-      rangeText = this.formatCustomDateRange();
-    }
-
-    this.elements.dateRange.textContent = rangeText;
+  formatDateLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
-  formatCustomDateRange() {
-    const formatDate = (dateStr) => {
-      // Parse YYYY-MM-DD string manually to avoid UTC timezone issues
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const date = new Date(year, month - 1, day); // month is 0-indexed
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+  formatDateDisplay(dateStr) {
+    if (!dateStr) return '';
 
-    if (this.filters.dateFrom && this.filters.dateTo) {
-      return `${formatDate(this.filters.dateFrom)} - ${formatDate(this.filters.dateTo)}`;
-    } else if (this.filters.dateFrom) {
-      return `Since ${formatDate(this.filters.dateFrom)}`;
-    } else if (this.filters.dateTo) {
-      return `Until ${formatDate(this.filters.dateTo)}`;
-    }
-    return 'All time';
-  }
+    // Parse YYYY-MM-DD string
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
 
-  findActualPriceDate(ticker, targetDateStr) {
-    // Helper to find which date was actually used for the price lookup
-    if (!historicalPrices.cache[ticker]) return null;
-
-    // Check exact match first
-    if (historicalPrices.cache[ticker][targetDateStr]) {
-      return targetDateStr;
-    }
-
-    // Look for nearest previous date (up to 7 days back, same as getPriceOnDate)
-    const targetDate = new Date(targetDateStr);
-    for (let i = 1; i <= 7; i++) {
-      const prevDate = new Date(targetDate);
-      prevDate.setDate(prevDate.getDate() - i);
-      const prevDateStr = historicalPrices.formatDate(prevDate);
-
-      if (historicalPrices.cache[ticker][prevDateStr]) {
-        return prevDateStr;
-      }
-    }
-
-    return null;
-  }
-
-  async buildEquityCurve() {
-    // Show loading spinner
-    if (this.elements.chartLoading) {
-      this.elements.chartLoading.style.display = 'inline-flex';
-    }
-
-    try {
-      // Always use ALL entries for equity curve - we want to see the true account balance
-      const allEntries = state.journal.entries;
-      const startingBalance = state.settings.startingAccountSize;
-      const cashFlowTransactions = (state.cashFlow && state.cashFlow.transactions) || [];
-
-      // Get closed trades sorted by close date (from ALL entries, not filtered)
-      const closedTrades = allEntries
-        .filter(e => e.status === 'closed' || e.status === 'trimmed')
-        .map(t => ({
-          date: t.closeDate || t.timestamp,
-          pnl: t.totalRealizedPnL ?? t.pnl ?? 0,
-          ticker: t.ticker,
-          entry: t
-        }))
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-      // Get all entry dates to determine the start date
-      const allEntryDates = allEntries
-        .filter(e => e.timestamp)
-        .map(e => new Date(e.timestamp));
-
-      if (closedTrades.length === 0 && allEntryDates.length === 0) {
-        return [];
-      }
-
-      // Determine date range: from first trade entry OR filter start date to filter end date (or today if no filter)
-      let firstDate;
-      if (this.filters.dateFrom) {
-        // If filter is set, start from filter date
-        // Parse YYYY-MM-DD string manually to avoid UTC timezone issues
-        const [year, month, day] = this.filters.dateFrom.split('-').map(Number);
-        firstDate = new Date(year, month - 1, day); // month is 0-indexed
-        firstDate.setHours(0, 0, 0, 0);
-      } else {
-        // Otherwise start from first trade entry
-        firstDate = allEntryDates.length > 0
-          ? new Date(Math.min(...allEntryDates.map(d => d.getTime())))
-          : new Date(closedTrades[0].date);
-        firstDate.setHours(0, 0, 0, 0);
-      }
-
-      // Apply date filter if set, otherwise use today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      let endDate = today;
-      if (this.filters.dateTo) {
-        // Parse YYYY-MM-DD string manually to avoid UTC timezone issues
-        const [year, month, day] = this.filters.dateTo.split('-').map(Number);
-        endDate = new Date(year, month - 1, day); // month is 0-indexed
-        endDate.setHours(0, 0, 0, 0);
-      }
-
-      // Check if we're filtering to a date before today
-      // IMPORTANT: If today is a weekend, the most recent weekday should be treated as "today"
-      // since the date picker disables weekends
-      const currentWeekday = getCurrentWeekday();
-      currentWeekday.setHours(0, 0, 0, 0);
-      const isFilteredToBeforeToday = this.filters.dateTo && endDate < currentWeekday;
-
-      // Check if we have an API key for historical prices
-      const hasApiKey = historicalPrices.apiKey !== null;
-
-      // Calculate starting balance for the filtered period
-      let adjustedStartingBalance = startingBalance;
-      if (this.filters.dateFrom) {
-        // Calculate realized P&L and cash flow up to the filter start date
-        // Parse YYYY-MM-DD string manually to avoid UTC timezone issues
-        const [year, month, day] = this.filters.dateFrom.split('-').map(Number);
-        const filterStartDate = new Date(year, month - 1, day); // month is 0-indexed
-        filterStartDate.setHours(0, 0, 0, 0);
-
-        // Add realized P&L from trades closed before filter start date
-        const tradesBeforeFilter = closedTrades.filter(trade => {
-          const closeDate = new Date(trade.date);
-          closeDate.setHours(0, 0, 0, 0);
-          return closeDate < filterStartDate;
-        });
-        const realizedPnLBeforeFilter = tradesBeforeFilter.reduce((sum, t) => sum + t.pnl, 0);
-
-        // Add cash flow before filter start date
-        const cashFlowBeforeFilter = cashFlowTransactions
-          .filter(transaction => {
-            const txDate = new Date(transaction.timestamp);
-            txDate.setHours(0, 0, 0, 0);
-            return txDate < filterStartDate;
-          })
-          .reduce((sum, tx) => {
-            const amount = tx.type === 'deposit' ? tx.amount : -tx.amount;
-            return sum + amount;
-          }, 0);
-
-        adjustedStartingBalance = startingBalance + realizedPnLBeforeFilter + cashFlowBeforeFilter;
-      }
-
-      // Initialize dataPoints array (will be populated in the loop below)
-      const dataPoints = [];
-
-      // Group closed trades by day
-      const tradesByDay = new Map();
-      closedTrades.forEach(trade => {
-        const dateStr = historicalPrices.formatDate(trade.date);
-        if (!tradesByDay.has(dateStr)) {
-          tradesByDay.set(dateStr, []);
-        }
-        tradesByDay.get(dateStr).push(trade);
-      });
-
-      // Group cash flow by day
-      const cashFlowByDay = new Map();
-      cashFlowTransactions.forEach(transaction => {
-        const dateStr = historicalPrices.formatDate(transaction.timestamp);
-        if (!cashFlowByDay.has(dateStr)) {
-          cashFlowByDay.set(dateStr, 0);
-        }
-        const amount = transaction.type === 'deposit' ? transaction.amount : -transaction.amount;
-        cashFlowByDay.set(dateStr, cashFlowByDay.get(dateStr) + amount);
-      });
-
-      // Build array of all days from first trade through today (inclusive)
-      const tradePoints = [];
-      const currentDate = new Date(firstDate);
-
-      // Track cumulative values
-      let cumulativeRealizedPnL = 0;
-      let cumulativeCashFlow = 0;
-
-      // Loop through each day from first trade to end date (inclusive)
-      while (currentDate.getTime() <= endDate.getTime()) {
-        const dateStr = historicalPrices.formatDate(currentDate);
-        const dateTimestamp = currentDate.getTime();
-
-        // Skip weekends (Saturday = 6, Sunday = 0)
-        const dayOfWeek = currentDate.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
-          // Move to next day
-          currentDate.setDate(currentDate.getDate() + 1);
-          currentDate.setHours(0, 0, 0, 0);
-          continue;
-        }
-
-        // Add realized P&L from trades closed on this day
-        let dayPnL = 0;
-        if (tradesByDay.has(dateStr)) {
-          const dayTrades = tradesByDay.get(dateStr);
-          dayPnL = dayTrades.reduce((sum, t) => sum + t.pnl, 0);
-          cumulativeRealizedPnL += dayPnL;
-        }
-
-        // Add cash flow from this day
-        if (cashFlowByDay.has(dateStr)) {
-          cumulativeCashFlow += cashFlowByDay.get(dateStr);
-        }
-
-        // Calculate balance for this day (realized only for now)
-        // Use adjustedStartingBalance to account for P&L before filter start date
-        const realizedBalance = adjustedStartingBalance + cumulativeRealizedPnL + cumulativeCashFlow;
-
-        tradePoints.push({
-          date: dateTimestamp,
-          dateStr,
-          realizedBalance,
-          pnl: dayPnL,
-          ticker: tradesByDay.has(dateStr)
-            ? tradesByDay.get(dateStr).map(t => t.ticker).join(', ')
-            : ''
-        });
-
-        // Move to next day
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(0, 0, 0, 0);
-      }
-
-      if (hasApiKey) {
-        // Get all unique tickers that were open at any point
-        const allTickers = [...new Set(allEntries.map(e => e.ticker).filter(t => t))];
-
-        if (allTickers.length > 0) {
-          await historicalPrices.batchFetchPrices(allTickers);
-        }
-      }
-
-      // Build final data points with unrealized P&L for ALL days
-      // Use calculateUnrealizedPnLAtDate for consistency (handles today's date with current prices)
-      tradePoints.forEach((point) => {
-        // Calculate unrealized P&L using our helper method
-        // This ensures today uses priceTracker, historical dates use historical prices
-        const unrealizedPnL = this.calculateUnrealizedPnLAtDate(point.dateStr);
-
-        // Balance = realized balance + unrealized P&L on that day
-        dataPoints.push({
-          date: point.date,
-          balance: point.realizedBalance + unrealizedPnL,
-          pnl: point.pnl,
-          ticker: point.ticker,
-          unrealizedPnL
-        });
-      });
-
-      // Only add a final point for RIGHT NOW if we're not filtering to a date before today
-      // AND the last data point isn't already from today
-      if (!isFilteredToBeforeToday) {
-        const currentOpenTrades = allEntries.filter(e => e.status === 'open' || e.status === 'trimmed');
-
-        if (currentOpenTrades.length > 0) {
-          // Check if the last data point is already from today (or current weekday if today is weekend)
-          const currentWeekdayDate = getCurrentWeekday();
-          currentWeekdayDate.setHours(0, 0, 0, 0);
-
-          const lastDataPoint = dataPoints.length > 0 ? dataPoints[dataPoints.length - 1] : null;
-          let lastPointIsToday = false;
-          if (lastDataPoint) {
-            const lastPointDate = new Date(lastDataPoint.date);
-            lastPointDate.setHours(0, 0, 0, 0);
-            lastPointIsToday = lastPointDate.getTime() === currentWeekdayDate.getTime();
-          }
-
-          // If last point is today, update its balance to match current account
-          // Otherwise, add a "now" point
-          if (lastPointIsToday) {
-            // Recalculate the balance for today's point to ensure it matches current account
-            const currentUnrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(currentOpenTrades);
-            const allClosedTrades = allEntries.filter(e => e.status === 'closed' || e.status === 'trimmed');
-            const allTimePnL = allClosedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
-            const allTimeCashFlow = state.getCashFlowNet();
-            const realizedBalance = startingBalance + allTimePnL + allTimeCashFlow;
-
-            // Update the last point's balance to match current account
-            lastDataPoint.balance = realizedBalance + (currentUnrealizedPnL?.totalPnL || 0);
-            lastDataPoint.unrealizedPnL = currentUnrealizedPnL?.totalPnL || 0;
-          } else {
-            const currentUnrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(currentOpenTrades);
-
-            // Calculate realized balance including all cash flow up to today
-            // This ensures the final point matches the current account balance
-            const allClosedTrades = allEntries.filter(e => e.status === 'closed' || e.status === 'trimmed');
-            const allTimePnL = allClosedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
-            const allTimeCashFlow = state.getCashFlowNet();
-            const realizedBalance = startingBalance + allTimePnL + allTimeCashFlow;
-
-            // Add current moment with live prices
-            dataPoints.push({
-              date: Date.now(),
-              balance: realizedBalance + (currentUnrealizedPnL?.totalPnL || 0),
-              pnl: 0,
-              ticker: 'Now',
-              unrealizedPnL: currentUnrealizedPnL?.totalPnL || 0
-            });
-          }
-        }
-      }
-
-      return dataPoints;
-    } catch (error) {
-      console.error('Error building equity curve:', error);
-      // Return basic equity curve without historical unrealized P&L
-      return this.buildBasicEquityCurve();
-    } finally {
-      // Hide loading spinner
-      if (this.elements.chartLoading) {
-        this.elements.chartLoading.style.display = 'none';
-      }
-    }
-  }
-
-  // Fallback: Build basic equity curve without historical unrealized P&L
-  buildBasicEquityCurve() {
-    const entries = this.getFilteredTrades();
-    const startingBalance = state.settings.startingAccountSize;
-
-    const closedTrades = entries
-      .filter(e => e.status === 'closed' || e.status === 'trimmed')
-      .map(t => ({
-        date: t.closeDate || t.timestamp,
-        pnl: t.totalRealizedPnL ?? t.pnl ?? 0,
-        ticker: t.ticker
-      }))
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    if (closedTrades.length === 0) {
-      return [];
-    }
-
-    // Group trades by day
-    const tradesByDay = new Map();
-    closedTrades.forEach(trade => {
-      const dateStr = historicalPrices.formatDate(trade.date);
-      if (!tradesByDay.has(dateStr)) {
-        tradesByDay.set(dateStr, []);
-      }
-      tradesByDay.get(dateStr).push(trade);
-    });
-
-    let balance = startingBalance;
-    const dataPoints = [];
-
-    // Create one point per day
-    const sortedDays = Array.from(tradesByDay.keys()).sort();
-    sortedDays.forEach(dateStr => {
-      const dayTrades = tradesByDay.get(dateStr);
-      const dayPnL = dayTrades.reduce((sum, t) => sum + t.pnl, 0);
-      balance += dayPnL;
-
-      dataPoints.push({
-        date: new Date(dateStr).getTime(),
-        balance,
-        pnl: dayPnL,
-        ticker: dayTrades.map(t => t.ticker).join(', ')
-      });
-    });
-
-    return dataPoints;
-  }
-
-  getStats() {
-    return this.stats;
+    // Format as "Dec 12, 2025"
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   }
 }
 

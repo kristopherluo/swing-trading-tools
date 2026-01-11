@@ -518,7 +518,7 @@
             <span class="stat-card__value" id="statTotalGrowth">0.00%</span>
             <span class="stat-card__sub">P&L including deposits & withdrawals</span>
           </div>
-          <div class="stat-card">
+          <div class="stat-card" id="statCashFlowCard">
             <span class="stat-card__label">Net Cash Flow</span>
             <span class="stat-card__value" id="statCashFlow">$0.00</span>
             <span class="stat-card__sub">(Deposits - withdrawals)</span>
@@ -982,12 +982,7 @@
   <div class="modal modal--wizard" id="wizardModal">
     <div class="modal__header">
       <h2 class="modal__title">Log Trade</h2>
-      <button class="icon-btn" id="closeWizardBtn" aria-label="Close wizard">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
+      <button class="filter-dropdown__close" id="closeWizardBtn" aria-label="Close wizard">×</button>
     </div>
 
     <!-- Wizard Progress -->

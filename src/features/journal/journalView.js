@@ -9,16 +9,20 @@ import { viewManager } from '../../components/ui/viewManager.js';
 import { dataManager } from '../../core/dataManager.js';
 import { priceTracker } from '../../core/priceTracker.js';
 import { showToast } from '../../components/ui/ui.js';
+import { DateRangeFilter } from '../../shared/DateRangeFilter.js';
+import { FilterPopup } from '../../shared/FilterPopup.js';
 
 class JournalView {
   constructor() {
     this.elements = {};
+    // Use shared date range filter
+    this.dateRangeFilter = new DateRangeFilter();
+    // Journal-specific filters (status and types)
     this.filters = {
       status: 'all',
       types: ['ep', 'long-term', 'base', 'breakout', 'bounce', 'other'], // Default to all types selected
-      dateFrom: null,
-      dateTo: null
     };
+    this.filterPopup = null; // Shared filter popup component
     this.sortColumn = 'date';
     this.sortDirection = 'desc';
     this.expandedRows = new Set();
@@ -33,6 +37,22 @@ class JournalView {
 
     // Initialize date pickers before binding events
     this.disableWeekends();
+
+    // Initialize shared filter popup
+    this.filterPopup = new FilterPopup({
+      elements: {
+        filterBtn: this.elements.filterBtn,
+        filterPanel: this.elements.filterPanel,
+        filterBackdrop: this.elements.filterBackdrop,
+        filterClose: this.elements.filterClose,
+        applyBtn: this.elements.applyFilters,
+        resetBtn: this.elements.selectAllTypes,
+        filterCount: this.elements.filterCount
+      },
+      onOpen: () => this.syncFilterUIToState(),
+      onApply: () => this.applyFilters(),
+      onReset: () => this.selectAllTypes()
+    });
 
     this.bindEvents();
 
@@ -50,9 +70,11 @@ class JournalView {
     const dateFrom = this.dateFromPicker?.input?.value || null;
     const dateTo = this.dateToPicker?.input?.value || null;
     if (dateFrom && dateTo) {
-      this.filters.dateFrom = dateFrom;
-      this.filters.dateTo = dateTo;
+      this.dateRangeFilter.setFilter(dateFrom, dateTo);
     }
+
+    // Update filter count badge (should be 0 since all filters are at default state)
+    this.updateFilterCount();
 
     this.render();
 
@@ -87,6 +109,8 @@ class JournalView {
 
       if (datesWithTrades.length > 0) {
         minDate = new Date(Math.min(...datesWithTrades));
+        // IMPORTANT: Set to start of day (midnight) to avoid time component issues
+        minDate.setHours(0, 0, 0, 0);
       }
     }
 
@@ -156,27 +180,7 @@ class JournalView {
       });
     }
 
-    // Filter dropdown
-    if (this.elements.filterBtn) {
-      this.elements.filterBtn.addEventListener('click', () => this.toggleFilterPanel());
-    }
-
-    if (this.elements.filterClose) {
-      this.elements.filterClose.addEventListener('click', () => this.closeFilterPanel());
-    }
-
-    if (this.elements.applyFilters) {
-      this.elements.applyFilters.addEventListener('click', () => this.applyFilters());
-    }
-
-    if (this.elements.selectAllTypes) {
-      this.elements.selectAllTypes.addEventListener('click', () => this.selectAllTypes());
-    }
-
-    // Filter backdrop
-    if (this.elements.filterBackdrop) {
-      this.elements.filterBackdrop.addEventListener('click', () => this.closeFilterPanel());
-    }
+    // Note: Filter popup open/close/apply/reset now handled by shared FilterPopup component
 
     // Status buttons
     if (this.elements.statusBtns) {
@@ -239,17 +243,7 @@ class JournalView {
       });
     }
 
-    // Close panel when clicking outside
-    document.addEventListener('click', (e) => {
-      if (this.elements.filterPanel?.classList.contains('open')) {
-        const isClickInside = this.elements.filterBtn?.contains(e.target) ||
-                             this.elements.filterPanel?.contains(e.target) ||
-                             e.target.closest('.flatpickr-calendar');
-        if (!isClickInside) {
-          this.closeFilterPanel();
-        }
-      }
-    });
+    // Note: Click outside to close handled by shared FilterPopup component
 
     // Export buttons
     if (this.elements.exportCSV) {
@@ -270,32 +264,7 @@ class JournalView {
     }
   }
 
-  toggleFilterPanel() {
-    const isOpen = this.elements.filterPanel?.classList.contains('open');
-    if (isOpen) {
-      this.closeFilterPanel();
-    } else {
-      this.openFilterPanel();
-    }
-  }
-
-  openFilterPanel() {
-    // Restore UI to match current applied filters
-    this.syncFilterUIToState();
-
-    this.elements.filterPanel?.classList.add('open');
-    this.elements.filterBtn?.classList.add('open');
-    this.elements.filterBackdrop?.classList.add('open');
-  }
-
-  closeFilterPanel() {
-    // Restore UI to last applied state when closing without applying
-    this.syncFilterUIToState();
-
-    this.elements.filterPanel?.classList.remove('open');
-    this.elements.filterBtn?.classList.remove('open');
-    this.elements.filterBackdrop?.classList.remove('open');
-  }
+  // Note: toggleFilterPanel, openFilterPanel, closeFilterPanel now handled by shared FilterPopup component
 
   syncFilterUIToState() {
     // Sync status buttons to current filter state
@@ -329,71 +298,8 @@ class JournalView {
       }
     }
 
-    // Sync date range to current filter state
-    if (this.elements.dateFrom) {
-      this.elements.dateFrom.value = this.filters.dateFrom || '';
-    }
-    if (this.elements.dateTo) {
-      this.elements.dateTo.value = this.filters.dateTo || '';
-    }
-
-    // Determine which preset button should be active
-    const hasDateFilter = this.filters.dateFrom || this.filters.dateTo;
-    if (!hasDateFilter) {
-      // No dates set - this shouldn't happen with new Max default, but handle it
-      this.elements.datePresetBtns?.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.range === 'max');
-      });
-    } else {
-      let matchedPreset = null;
-      const today = getCurrentWeekday();
-      const todayStr = this.formatDate(today);
-
-      // Check if it matches Max preset (earliest trade to today)
-      const allTrades = state.journal.entries;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
-
-        if (datesWithTrades.length > 0) {
-          let earliestDate = new Date(Math.min(...datesWithTrades));
-          const dayOfWeek = earliestDate.getDay();
-          if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
-          else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
-
-          const earliestStr = this.formatDate(earliestDate);
-          if (this.filters.dateFrom === earliestStr && this.filters.dateTo === todayStr) {
-            matchedPreset = 'max';
-          }
-        }
-      }
-
-      // Check numeric ranges if Max didn't match
-      if (!matchedPreset) {
-        this.elements.datePresetBtns?.forEach(btn => {
-          const range = btn.dataset.range;
-          if (range !== 'all' && range !== 'max' && range !== 'ytd' && !isNaN(parseInt(range))) {
-            const fromDate = new Date(today);
-            fromDate.setDate(today.getDate() - parseInt(range));
-            const fromDayOfWeek = fromDate.getDay();
-            if (fromDayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (fromDayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
-
-            const expectedFrom = this.formatDate(fromDate);
-
-            if (this.filters.dateFrom === expectedFrom && this.filters.dateTo === todayStr) {
-              matchedPreset = range;
-            }
-          }
-        });
-      }
-
-      // Update button active states
-      this.elements.datePresetBtns?.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.range === matchedPreset);
-      });
-    }
+    // Sync date range to current filter state (using shared date range filter)
+    this.dateRangeFilter.syncFilterUIToState(this.elements, this.elements.datePresetBtns);
   }
 
   handleDatePreset(range) {
@@ -406,118 +312,22 @@ class JournalView {
     );
     clickedBtn?.classList.add('active');
 
-    if (range === 'max') {
-      // Max: from earliest trade to today
-      const today = getCurrentWeekday();
-      const allTrades = state.journal.entries;
+    // Get dates from shared filter handler
+    const dates = this.dateRangeFilter.handleDatePreset(range);
 
-      // Find earliest trade date
-      let earliestDate = today;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
+    // Set date inputs using flatpickr
+    if (this.dateFromPicker && dates.dateFrom) {
+      const [year, month, day] = dates.dateFrom.split('-').map(Number);
+      const fromDate = new Date(year, month - 1, day);
+      this.dateFromPicker.setDate(fromDate);
+      this.elements.dateFrom?.classList.add('preset-value');
+    }
 
-        if (datesWithTrades.length > 0) {
-          earliestDate = new Date(Math.min(...datesWithTrades));
-          // Adjust to previous weekday if weekend
-          const dayOfWeek = earliestDate.getDay();
-          if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
-          else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
-        }
-      }
-
-      if (this.dateFromPicker) {
-        this.dateFromPicker.setDate(earliestDate);
-        this.elements.dateFrom?.classList.add('preset-value');
-      }
-      if (this.dateToPicker) {
-        this.dateToPicker.setDate(today);
-        this.elements.dateTo?.classList.add('preset-value');
-      }
-    } else if (range === 'ytd') {
-      // Year to date - from Jan 1 of current year to today (adjusted to weekday)
-      const today = getCurrentWeekday();
-      const fromDate = new Date(today.getFullYear(), 0, 1);
-
-      // Adjust fromDate to next weekday if it's a weekend
-      const fromDayOfWeek = fromDate.getDay();
-      if (fromDayOfWeek === 0) {
-        fromDate.setDate(fromDate.getDate() + 1);
-      } else if (fromDayOfWeek === 6) {
-        fromDate.setDate(fromDate.getDate() + 2);
-      }
-
-      // Don't go back before earliest trade
-      const allTrades = state.journal.entries;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
-
-        if (datesWithTrades.length > 0) {
-          const earliestDate = new Date(Math.min(...datesWithTrades));
-          if (fromDate < earliestDate) {
-            fromDate.setTime(earliestDate.getTime());
-            // Adjust to previous weekday if weekend
-            const dayOfWeek = fromDate.getDay();
-            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
-          }
-        }
-      }
-
-      // Set date inputs using flatpickr
-      if (this.dateFromPicker) {
-        this.dateFromPicker.setDate(fromDate);
-        this.elements.dateFrom?.classList.add('preset-value');
-      }
-      if (this.dateToPicker) {
-        this.dateToPicker.setDate(today);
-        this.elements.dateTo?.classList.add('preset-value');
-      }
-    } else {
-      // Calculate date range based on number of days
-      const today = getCurrentWeekday();
-      const fromDate = new Date(today);
-      fromDate.setDate(today.getDate() - parseInt(range));
-
-      // Adjust fromDate to previous weekday if it's a weekend
-      const fromDayOfWeek = fromDate.getDay();
-      if (fromDayOfWeek === 0) {
-        fromDate.setDate(fromDate.getDate() - 2);
-      } else if (fromDayOfWeek === 6) {
-        fromDate.setDate(fromDate.getDate() - 1);
-      }
-
-      // Don't go back before earliest trade
-      const allTrades = state.journal.entries;
-      if (allTrades && allTrades.length > 0) {
-        const datesWithTrades = allTrades
-          .filter(t => t.timestamp)
-          .map(t => new Date(t.timestamp));
-
-        if (datesWithTrades.length > 0) {
-          const earliestDate = new Date(Math.min(...datesWithTrades));
-          if (fromDate < earliestDate) {
-            fromDate.setTime(earliestDate.getTime());
-            // Adjust to previous weekday if weekend
-            const dayOfWeek = fromDate.getDay();
-            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
-          }
-        }
-      }
-
-      // Set date inputs using flatpickr
-      if (this.dateFromPicker) {
-        this.dateFromPicker.setDate(fromDate);
-        this.elements.dateFrom?.classList.add('preset-value');
-      }
-      if (this.dateToPicker) {
-        this.dateToPicker.setDate(today);
-        this.elements.dateTo?.classList.add('preset-value');
-      }
+    if (this.dateToPicker && dates.dateTo) {
+      const [year, month, day] = dates.dateTo.split('-').map(Number);
+      const toDate = new Date(year, month - 1, day);
+      this.dateToPicker.setDate(toDate);
+      this.elements.dateTo?.classList.add('preset-value');
     }
   }
 
@@ -548,11 +358,12 @@ class JournalView {
       return; // Don't apply filters
     }
 
-    // Update filters
+    // Update journal-specific filters
     this.filters.status = selectedStatus;
     this.filters.types = selectedTypes;
-    this.filters.dateFrom = dateFrom;
-    this.filters.dateTo = dateTo;
+
+    // Update shared date range filter
+    this.dateRangeFilter.setFilter(dateFrom, dateTo);
 
     // Update filter count badge
     this.updateFilterCount();
@@ -563,8 +374,7 @@ class JournalView {
     // Reset animation flag to re-animate rows
     this.hasAnimated = false;
 
-    // Close panel and render
-    this.closeFilterPanel();
+    // Render (FilterPopup handles closing)
     this.render();
   }
 
@@ -606,18 +416,14 @@ class JournalView {
       count += selectedTypes;
     }
 
-    // Count date range filter
-    if (this.filters.dateFrom || this.filters.dateTo) {
+    // Count date range filter (only if not Max preset)
+    const dateFilter = this.dateRangeFilter.getActiveFilter();
+    if ((dateFilter.dateFrom || dateFilter.dateTo) && !this.dateRangeFilter.isMaxPreset()) {
       count++;
     }
 
-    // Update badge
-    if (count > 0) {
-      this.elements.filterCount.textContent = count;
-      this.elements.filterCount.style.display = 'inline-flex';
-    } else {
-      this.elements.filterCount.style.display = 'none';
-    }
+    // Update badge using shared FilterPopup
+    this.filterPopup.updateFilterCount(count);
   }
 
   handleSort(column) {
@@ -680,25 +486,8 @@ class JournalView {
       });
     }
 
-    // Filter by date range
-    if (this.filters.dateFrom || this.filters.dateTo) {
-      filtered = filtered.filter(trade => {
-        const tradeDate = new Date(trade.timestamp);
-        const tradeDateOnly = this.formatDateLocal(tradeDate); // YYYY-MM-DD in local timezone
-
-        let inRange = true;
-
-        if (this.filters.dateFrom) {
-          inRange = inRange && tradeDateOnly >= this.filters.dateFrom;
-        }
-
-        if (this.filters.dateTo) {
-          inRange = inRange && tradeDateOnly <= this.filters.dateTo;
-        }
-
-        return inRange;
-      });
-    }
+    // Filter by date range (using shared date range filter)
+    filtered = this.dateRangeFilter.getFilteredTrades(filtered);
 
     // Sort
     return this.sortTrades(filtered);
@@ -804,13 +593,14 @@ class JournalView {
       t => t.status === 'closed' || t.status === 'trimmed'
     );
 
-    // Update date range display
+    // Update date range display (using shared date range filter)
     if (this.elements.dateRange) {
+      const dateFilter = this.dateRangeFilter.getActiveFilter();
       let dateRangeText = 'All time';
 
-      if (this.filters.dateFrom || this.filters.dateTo) {
-        const from = this.filters.dateFrom || 'Beginning';
-        const to = this.filters.dateTo || 'Today';
+      if (dateFilter.dateFrom || dateFilter.dateTo) {
+        const from = dateFilter.dateFrom || 'Beginning';
+        const to = dateFilter.dateTo || 'Today';
 
         // Format dates nicely
         const formatShortDate = (dateStr) => {

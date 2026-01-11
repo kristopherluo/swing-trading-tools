@@ -64,23 +64,9 @@ class EquityChart {
     this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     this.canvas.addEventListener('mouseleave', () => this.handleMouseLeave());
 
-    // Listen for view changes to render
-    state.on('viewChanged', (data) => {
-      if (data.to === 'stats') {
-        // Wait for view animation to complete (200ms show + 300ms animation + buffer)
-        setTimeout(() => {
-          this.resize();
-        }, 550);
-      }
-    });
-
-    // Listen for journal changes
-    state.on('journalEntryAdded', () => this.render());
-    state.on('journalEntryUpdated', () => this.render());
-    state.on('journalEntryDeleted', () => this.render());
-
-    // Listen for stats updates (e.g., filter changes)
-    state.on('statsUpdated', () => this.render());
+    // Note: Rendering is now controlled by stats.js via setData() and render()
+    // No need to listen for view or journal changes here
+    // The resize happens automatically via the window resize listener above
   }
 
   resize() {
@@ -101,7 +87,10 @@ class EquityChart {
     // Setting canvas width/height resets the context, so reapply transformations
     this.ctx.scale(this.dpr, this.dpr);
 
-    this.render();
+    // Only render if we have data
+    if (this.data) {
+      this.render();
+    }
   }
 
   getColors() {
@@ -110,10 +99,21 @@ class EquityChart {
     return isLight ? this.lightColors : this.colors;
   }
 
+  // Set chart data (called from stats.js)
+  setData(data) {
+    this.data = data;
+  }
+
   async render() {
     if (!this.ctx || !this.canvas) return;
 
-    const data = await stats.buildEquityCurve();
+    // Use data passed from stats.js instead of fetching
+    const data = this.data;
+    if (!data) {
+      console.warn('No data to render');
+      return;
+    }
+
     const width = this.canvas.width / this.dpr;
     const height = this.canvas.height / this.dpr;
 

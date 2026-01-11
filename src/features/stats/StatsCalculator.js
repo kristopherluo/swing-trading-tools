@@ -1,0 +1,289 @@
+/**
+ * StatsCalculator - Pure calculation logic for all stats metrics
+ * No DOM dependencies, fully testable
+ */
+
+import { state } from '../../core/state.js';
+import { priceTracker } from '../../core/priceTracker.js';
+import { equityCurveManager } from './EquityCurveManager.js';
+import { getPreviousBusinessDay } from '../../core/utils.js';
+
+export class StatsCalculator {
+  /**
+   * Calculate current account balance (includes unrealized P&L)
+   * Always uses ALL trades, not filtered
+   */
+  calculateCurrentAccount() {
+    const allEntries = state.journal.entries;
+    const startingAccount = state.settings.startingAccountSize;
+
+    const allClosedTrades = allEntries.filter(e => e.status === 'closed' || e.status === 'trimmed');
+    const allTimePnL = allClosedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+
+    const allOpenTrades = allEntries.filter(e => e.status === 'open' || e.status === 'trimmed');
+    const unrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
+
+    const allTimeCashFlow = state.getCashFlowNet();
+
+    return startingAccount + allTimePnL + (unrealizedPnL?.totalPnL || 0) + allTimeCashFlow;
+  }
+
+  /**
+   * Calculate realized P&L from closed/trimmed trades within date range
+   */
+  calculateRealizedPnL(trades) {
+    const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
+    return closedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+  }
+
+  /**
+   * Calculate win rate from closed trades
+   * Returns percentage or null if no trades
+   */
+  calculateWinRate(trades) {
+    const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
+
+    if (closedTrades.length === 0) return null;
+
+    const wins = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) > 0);
+    return (wins.length / closedTrades.length) * 100;
+  }
+
+  /**
+   * Calculate wins and losses count
+   */
+  calculateWinsLosses(trades) {
+    const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
+
+    const wins = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) > 0);
+    const losses = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) < 0);
+
+    return {
+      wins: wins.length,
+      losses: losses.length,
+      total: closedTrades.length
+    };
+  }
+
+  /**
+   * Calculate Sharpe ratio from closed trades
+   * Returns null if less than 2 trades or stdDev is 0
+   */
+  calculateSharpeRatio(trades) {
+    const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
+
+    if (closedTrades.length < 2) return null;
+
+    // Get returns as percentages
+    const returns = closedTrades.map(t => {
+      const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
+      const positionSize = t.positionSize || 1;
+      return (pnl / positionSize) * 100;
+    });
+
+    // Mean return
+    const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+
+    // Standard deviation
+    const squaredDiffs = returns.map(r => Math.pow(r - mean, 2));
+    const variance = squaredDiffs.reduce((sum, d) => sum + d, 0) / returns.length;
+    const stdDev = Math.sqrt(variance);
+
+    // Sharpe ratio (simplified, no risk-free rate)
+    if (stdDev === 0) return null;
+    return mean / stdDev;
+  }
+
+  /**
+   * Calculate net cash flow within date range
+   */
+  calculateNetCashFlow(dateFrom, dateTo) {
+    const cashFlowTransactions = state.cashFlow?.transactions || [];
+
+    if (!dateFrom && !dateTo) {
+      // No filter - return all time cash flow
+      return state.getCashFlowNet();
+    }
+
+    // Filter transactions by date range
+    return cashFlowTransactions
+      .filter(tx => {
+        const txDate = new Date(tx.timestamp);
+        txDate.setHours(0, 0, 0, 0);
+        const txDateStr = this._formatDate(txDate);
+
+        let inRange = true;
+        if (dateFrom) {
+          inRange = inRange && txDateStr >= dateFrom;
+        }
+        if (dateTo) {
+          inRange = inRange && txDateStr <= dateTo;
+        }
+        return inRange;
+      })
+      .reduce((sum, tx) => sum + (tx.type === 'deposit' ? tx.amount : -tx.amount), 0);
+  }
+
+  /**
+   * Calculate P&L using equity curve
+   * This is the NEW simplified approach using equity curve as source of truth
+   */
+  calculatePnL(dateFrom, dateTo) {
+    const allEntries = state.journal.entries;
+    const startingAccountSize = state.settings.startingAccountSize;
+
+    // Get all entry dates to determine earliest trade date
+    const allEntryDates = allEntries
+      .filter(e => e.timestamp)
+      .map(e => new Date(e.timestamp));
+
+    if (allEntryDates.length === 0) {
+      return {
+        pnl: 0,
+        startingBalance: startingAccountSize,
+        endingBalance: startingAccountSize
+      };
+    }
+
+    const earliestTradeDate = new Date(Math.min(...allEntryDates.map(d => d.getTime())));
+    earliestTradeDate.setHours(0, 0, 0, 0);
+    const earliestTradeDateStr = this._formatDate(earliestTradeDate);
+
+    // Determine start balance and date
+    let startBalance;
+    let startDateStr;
+
+    if (!dateFrom || dateFrom === earliestTradeDateStr) {
+      // Starting from earliest trade or no filter - use starting account size
+      startBalance = startingAccountSize;
+      startDateStr = earliestTradeDateStr;
+    } else {
+      // Starting from after earliest trade - get balance from day before start date
+      const startDate = this._parseDate(dateFrom);
+      const dayBefore = getPreviousBusinessDay(startDate);
+      const dayBeforeStr = this._formatDate(dayBefore);
+
+      // Get balance from equity curve
+      startBalance = equityCurveManager.getEODBalance(dayBeforeStr);
+
+      // If not in curve yet, fall back to manual calculation
+      if (startBalance === null) {
+        startBalance = this._calculateBalanceAtDate(dayBeforeStr);
+      }
+
+      startDateStr = dayBeforeStr;
+    }
+
+    // Determine end balance
+    let endBalance;
+    const endDateStr = dateTo || this._formatDate(getCurrentWeekday());
+
+    // Get balance from equity curve
+    endBalance = equityCurveManager.getEODBalance(endDateStr);
+
+    // If not in curve yet, fall back to current account for today
+    if (endBalance === null) {
+      endBalance = this.calculateCurrentAccount();
+    }
+
+    // Calculate P&L
+    const pnl = endBalance - startBalance;
+
+    return {
+      pnl: pnl,
+      startingBalance: startBalance,
+      endingBalance: endBalance,
+      startDateStr: startDateStr
+    };
+  }
+
+  /**
+   * Fallback: Calculate balance at a specific date (used when curve not available)
+   */
+  _calculateBalanceAtDate(dateStr) {
+    const allEntries = state.journal.entries;
+    const startingBalance = state.settings.startingAccountSize;
+    const targetDate = this._parseDate(dateStr);
+    targetDate.setHours(23, 59, 59, 999);
+
+    // Get closed trades before or on this date
+    const closedTradesBeforeDate = allEntries
+      .filter(e => e.status === 'closed' || e.status === 'trimmed')
+      .filter(e => {
+        if (!e.closeDate) return false;
+        const closeDate = new Date(e.closeDate);
+        closeDate.setHours(0, 0, 0, 0);
+        return closeDate <= targetDate;
+      });
+
+    const realizedPnL = closedTradesBeforeDate.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+
+    // Get cash flow before or on this date
+    const cashFlowBeforeDate = (state.cashFlow?.transactions || [])
+      .filter(tx => {
+        const txDate = new Date(tx.timestamp);
+        txDate.setHours(0, 0, 0, 0);
+        return txDate <= targetDate;
+      })
+      .reduce((sum, tx) => sum + (tx.type === 'deposit' ? tx.amount : -tx.amount), 0);
+
+    // Get unrealized P&L on this date (simplified - uses current prices as fallback)
+    const openTrades = allEntries.filter(e => {
+      const entryDate = new Date(e.timestamp);
+      entryDate.setHours(0, 0, 0, 0);
+
+      // Must be entered before or on this date
+      if (entryDate > targetDate) return false;
+
+      // If closed, must close after this date
+      if (e.status === 'closed' && e.closeDate) {
+        const closeDate = new Date(e.closeDate);
+        closeDate.setHours(0, 0, 0, 0);
+        if (closeDate <= targetDate) return false;
+      }
+
+      return e.status === 'open' || e.status === 'trimmed';
+    });
+
+    const unrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(openTrades);
+
+    return startingBalance + realizedPnL + cashFlowBeforeDate + (unrealizedPnL?.totalPnL || 0);
+  }
+
+  /**
+   * Format date to YYYY-MM-DD
+   */
+  _formatDate(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Parse YYYY-MM-DD to Date
+   */
+  _parseDate(dateStr) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+}
+
+// Import getCurrentWeekday at the top would cause circular dependency,
+// so we define a simple version here
+function getCurrentWeekday() {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+
+  // If Saturday (6), go back to Friday
+  if (dayOfWeek === 6) {
+    today.setDate(today.getDate() - 1);
+  }
+  // If Sunday (0), go back to Friday
+  else if (dayOfWeek === 0) {
+    today.setDate(today.getDate() - 2);
+  }
+
+  return today;
+}
