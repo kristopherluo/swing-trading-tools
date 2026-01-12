@@ -13,6 +13,7 @@ class TradeWizard {
     this.currentStep = 1;
     this.totalSteps = 3;
     this.skippedSteps = [];
+    this.updatingProgrammatically = false;
 
     // Thesis data collected during wizard
     this.thesis = {
@@ -124,6 +125,13 @@ class TradeWizard {
       wizardStopLoss: document.getElementById('wizardStopLoss'),
       wizardShares: document.getElementById('wizardShares'),
       wizardTargetPrice: document.getElementById('wizardTargetPrice'),
+      wizardRMultipleGroup: document.getElementById('wizardRMultipleGroup'),
+      wizardRMultipleBtns: document.querySelectorAll('#wizardRMultipleGroup .preset-btn'),
+      wizardRiskPercentGroup: document.getElementById('wizardRiskPercentGroup'),
+      wizardRiskPercentBtns: document.querySelectorAll('#wizardRiskPercentGroup .preset-btn'),
+      wizardRiskDollar: document.getElementById('wizardRiskDollar'),
+      wizardRiskPercentDisplay: document.getElementById('wizardRiskPercentDisplay'),
+      wizardRDisplay: document.getElementById('wizardRDisplay'),
       wizardTradeDate: document.getElementById('wizardTradeDate'),
       cancel1Btn: document.getElementById('wizardCancel1'),
       next1Btn: document.getElementById('wizardNext1'),
@@ -142,6 +150,7 @@ class TradeWizard {
       confirmTicker: document.getElementById('wizardConfirmTicker'),
       confirmPosition: document.getElementById('wizardConfirmPosition'),
       confirmRisk: document.getElementById('wizardConfirmRisk'),
+      confirmPositionSize: document.getElementById('wizardConfirmPositionSize'),
       confirmDate: document.getElementById('wizardConfirmDate'),
       confirmSetupRow: document.getElementById('wizardConfirmSetupRow'),
       confirmSetup: document.getElementById('wizardConfirmSetup'),
@@ -164,7 +173,7 @@ class TradeWizard {
     this.elements.overlay?.addEventListener('click', () => this.close());
 
     // Keyboard
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', async (e) => {
       if (!this.isOpen()) return;
       if (e.key === 'Escape') this.close();
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -173,7 +182,15 @@ class TradeWizard {
         if (isInNotesEditor) return;
 
         e.preventDefault();
-        this.nextStep();
+
+        // Validate step 1 before advancing
+        if (this.currentStep === 1) {
+          if (await this.validateStep1()) {
+            this.goToStep(2);
+          }
+        } else {
+          this.nextStep();
+        }
       }
     });
 
@@ -227,14 +244,86 @@ class TradeWizard {
     this.elements.wizardEntryPrice?.addEventListener('input', () => {
       const entry = parseFloat(this.elements.wizardEntryPrice.value) || 0;
       state.updateTrade({ entry });
+      this.updateRMultipleButtons();
+      this.updateRiskButtons();
+      this.updateRiskDisplay();
+      this.updateTargetRDisplay();
     });
     this.elements.wizardStopLoss?.addEventListener('input', () => {
       const stop = parseFloat(this.elements.wizardStopLoss.value) || 0;
       state.updateTrade({ stop });
+      this.updateRMultipleButtons();
+      this.updateRiskButtons();
+      this.updateRiskDisplay();
+      this.updateTargetRDisplay();
+    });
+    this.elements.wizardShares?.addEventListener('input', () => {
+      // Remove active state when shares manually changed
+      this.elements.wizardRiskPercentBtns?.forEach(b => b.classList.remove('active'));
+
+      this.updateRMultipleButtons();
+      this.updateRiskButtons();
+      this.updateRiskDisplay();
     });
     this.elements.wizardTargetPrice?.addEventListener('input', () => {
       const target = parseFloat(this.elements.wizardTargetPrice.value) || 0;
       state.updateTrade({ target });
+      this.updateTargetRDisplay();
+
+      // Check if target matches any R-Multiple preset and deselect if not
+      const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+      const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+
+      if (entry > 0 && stop > 0 && target > 0 && entry !== stop) {
+        const riskPerShare = entry - stop;
+        const presetRMultiples = [1, 2, 3, 4, 5];
+
+        // Check if current target matches any preset R-Multiple
+        const matchingPreset = presetRMultiples.find(r => {
+          const presetTarget = entry + (r * riskPerShare);
+          return Math.abs(target - presetTarget) < 0.01; // Allow small floating point differences
+        });
+
+        // If no match, deselect all R-Multiple buttons
+        if (!matchingPreset) {
+          this.elements.wizardRMultipleBtns?.forEach(btn => btn.classList.remove('active'));
+        }
+      }
+    });
+
+    // R-Multiple buttons
+    this.elements.wizardRMultipleBtns?.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rMultiple = parseFloat(btn.dataset.r);
+
+        // Remove active class from all buttons
+        this.elements.wizardRMultipleBtns.forEach(b => b.classList.remove('active'));
+
+        // Add active class to clicked button
+        btn.classList.add('active');
+
+        this.setTargetFromRMultiple(rMultiple);
+      });
+    });
+
+    // Risk percent buttons
+    this.elements.wizardRiskPercentBtns?.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const riskPercent = parseFloat(btn.dataset.risk);
+
+        // Remove active class from all buttons
+        this.elements.wizardRiskPercentBtns.forEach(b => b.classList.remove('active'));
+
+        // Add active class to clicked button
+        btn.classList.add('active');
+
+        this.setSharesFromRiskPercent(riskPercent);
+      });
+    });
+
+    // Risk dollar input
+    this.elements.wizardRiskDollar?.addEventListener('input', () => {
+      this.handleCustomRiskDollar();
     });
   }
 
@@ -393,6 +482,12 @@ class TradeWizard {
         this.elements.wizardTargetPrice?.focus();
         return false;
       }
+      // Ensure target is greater than entry
+      if (target <= entryPrice) {
+        showToast('Target price must be greater than entry price', 'error');
+        this.elements.wizardTargetPrice?.focus();
+        return false;
+      }
     }
 
     // Validate date (required)
@@ -448,6 +543,12 @@ class TradeWizard {
       this.elements.confirmRisk.textContent =
         `${formatCurrency(results.riskDollars || 0)} (${formatPercent(account.riskPercent || 0)})`;
     }
+    if (this.elements.confirmPositionSize) {
+      const positionSize = (trade.entry || 0) * (results.shares || 0);
+      const positionPercent = (positionSize / account.currentSize) * 100;
+      this.elements.confirmPositionSize.textContent =
+        `${formatCurrency(positionSize)} (${formatPercent(positionPercent)})`;
+    }
     if (this.elements.confirmDate) {
       // Get trade date from calculator or use today
       const tradeDateInput = document.getElementById('tradeDate');
@@ -455,6 +556,31 @@ class TradeWizard {
       const timestamp = createTimestampFromDateInput(tradeDate);
       const formattedDate = formatDate(timestamp, { year: 'numeric' });
       this.elements.confirmDate.textContent = formattedDate;
+    }
+
+    // Update R-Multiple buttons state after pre-filling
+    this.updateRMultipleButtons();
+
+    // Update risk buttons and display
+    this.updateRiskButtons();
+    this.updateRiskDisplay();
+    this.updateTargetRDisplay();
+
+    // Auto-select 5R if buttons are enabled
+    if (this.elements.wizardRMultipleBtns && this.elements.wizardRMultipleBtns.length > 0) {
+      const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+      const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+      const shares = parseInt(this.elements.wizardShares?.value) || 0;
+
+      if (entry > 0 && stop > 0 && shares > 0 && entry !== stop) {
+        // Auto-select 5R button
+        const fiveRBtn = Array.from(this.elements.wizardRMultipleBtns).find(btn => btn.dataset.r === '5');
+        if (fiveRBtn) {
+          this.elements.wizardRMultipleBtns.forEach(b => b.classList.remove('active'));
+          fiveRBtn.classList.add('active');
+          this.setTargetFromRMultiple(5);
+        }
+      }
     }
   }
 
@@ -551,6 +677,13 @@ class TradeWizard {
     // Update risk display
     if (this.elements.confirmRisk) {
       this.elements.confirmRisk.textContent = `${formatCurrency(riskDollars)} (${formatPercent(riskPercent)})`;
+    }
+
+    // Update position size display
+    if (this.elements.confirmPositionSize) {
+      const positionSize = entry * shares;
+      const positionPercent = (positionSize / state.account.currentSize) * 100;
+      this.elements.confirmPositionSize.textContent = `${formatCurrency(positionSize)} (${formatPercent(positionPercent)})`;
     }
 
     // Update date display
@@ -714,6 +847,208 @@ class TradeWizard {
     return this.thesis.setupType ||
            this.thesis.theme ||
            this.thesis.conviction;
+  }
+
+  updateRMultipleButtons() {
+    if (!this.elements.wizardRMultipleBtns) return;
+
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const shares = parseInt(this.elements.wizardShares?.value) || 0;
+
+    const canCalculate = entry > 0 && stop > 0 && shares > 0 && entry !== stop;
+
+    this.elements.wizardRMultipleBtns.forEach(btn => {
+      btn.disabled = !canCalculate;
+    });
+
+    // Auto-select 5R if buttons just became enabled and no button is selected and no target entered
+    if (canCalculate) {
+      const hasActiveButton = Array.from(this.elements.wizardRMultipleBtns).some(btn => btn.classList.contains('active'));
+      const targetValue = this.elements.wizardTargetPrice?.value.trim();
+
+      if (!hasActiveButton && !targetValue) {
+        const fiveRBtn = Array.from(this.elements.wizardRMultipleBtns).find(btn => btn.dataset.r === '5');
+        if (fiveRBtn) {
+          this.elements.wizardRMultipleBtns.forEach(b => b.classList.remove('active'));
+          fiveRBtn.classList.add('active');
+          this.setTargetFromRMultiple(5);
+        }
+      }
+    }
+  }
+
+  setTargetFromRMultiple(rMultiple) {
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+
+    if (entry <= 0 || stop <= 0 || entry === stop) return;
+
+    const riskPerShare = entry - stop;
+    const targetPrice = entry + (rMultiple * riskPerShare);
+
+    if (this.elements.wizardTargetPrice) {
+      this.elements.wizardTargetPrice.value = targetPrice.toFixed(2);
+      state.updateTrade({ target: targetPrice });
+    }
+
+    this.updateTargetRDisplay();
+  }
+
+  updateRiskButtons() {
+    if (!this.elements.wizardRiskPercentBtns) return;
+
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const accountSize = state.account.currentSize || 0;
+
+    // Enable when entry, stop valid AND account > 0 (shares not required - buttons calculate shares)
+    const canCalculate = entry > 0 &&
+                         stop > 0 &&
+                         entry !== stop &&
+                         accountSize > 0;
+
+    this.elements.wizardRiskPercentBtns.forEach(btn => {
+      btn.disabled = !canCalculate;
+    });
+  }
+
+  setSharesFromRiskPercent(riskPercent) {
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const accountSize = state.account.currentSize || 0;
+
+    if (entry <= 0 || stop <= 0 || entry === stop || accountSize <= 0) return;
+
+    const riskPerShare = entry - stop;
+    const riskDollars = accountSize * (riskPercent / 100);
+    const shares = Math.floor(riskDollars / riskPerShare);
+
+    // Update shares input and risk dollar display programmatically
+    this.updatingProgrammatically = true;
+    if (this.elements.wizardShares) {
+      this.elements.wizardShares.value = shares;
+    }
+    if (this.elements.wizardRiskDollar) {
+      this.elements.wizardRiskDollar.value = riskDollars.toFixed(2);
+    }
+    this.updatingProgrammatically = false;
+
+    // Update displays
+    this.updateRiskPercentDisplay();
+    this.updateRMultipleButtons();
+  }
+
+  handleCustomRiskDollar() {
+    const riskDollars = parseFloat(this.elements.wizardRiskDollar?.value) || 0;
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const accountSize = state.account.currentSize || 0;
+
+    if (riskDollars <= 0 || entry <= 0 || stop <= 0 || entry === stop) {
+      this.updateRiskPercentDisplay();
+      return;
+    }
+
+    // Calculate shares from risk dollars
+    const riskPerShare = entry - stop;
+    const shares = Math.floor(riskDollars / riskPerShare);
+
+    // Update shares input programmatically
+    this.updatingProgrammatically = true;
+    if (this.elements.wizardShares) {
+      this.elements.wizardShares.value = shares;
+    }
+    this.updatingProgrammatically = false;
+
+    // Calculate risk percentage
+    const riskPercent = accountSize > 0 ? (riskDollars / accountSize) * 100 : 0;
+
+    // Check if matches a preset button and auto-select it
+    const presetValues = [0.1, 0.25, 0.5, 1, 2];
+    const matchingPreset = presetValues.find(preset => {
+      const presetDollars = accountSize * (preset / 100);
+      return Math.abs(riskDollars - presetDollars) < 0.01; // Allow small floating point differences
+    });
+
+    // Update button states
+    this.elements.wizardRiskPercentBtns?.forEach(btn => {
+      const btnValue = parseFloat(btn.dataset.risk);
+      if (matchingPreset && btnValue === matchingPreset) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    // Update displays
+    this.updateRiskPercentDisplay();
+    this.updateRMultipleButtons();
+  }
+
+  updateRiskDisplay() {
+    if (!this.elements.wizardRiskDollar) return;
+
+    // Skip if we're programmatically updating to avoid circular updates
+    if (this.updatingProgrammatically) return;
+
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const shares = parseInt(this.elements.wizardShares?.value) || 0;
+
+    // Calculate risk dollars
+    let riskDollars = 0;
+    if (entry > 0 && stop > 0 && shares > 0 && entry !== stop) {
+      const riskPerShare = entry - stop;
+      riskDollars = riskPerShare * shares;
+    }
+
+    // Display formatted value
+    this.elements.wizardRiskDollar.value = riskDollars.toFixed(2);
+
+    // Update risk percent display
+    this.updateRiskPercentDisplay();
+  }
+
+  updateRiskPercentDisplay() {
+    if (!this.elements.wizardRiskPercentDisplay) return;
+
+    const riskDollars = parseFloat(this.elements.wizardRiskDollar?.value) || 0;
+    const accountSize = state.account.currentSize || 0;
+
+    // Calculate and display risk percentage
+    if (riskDollars > 0 && accountSize > 0) {
+      const riskPercent = (riskDollars / accountSize) * 100;
+      this.elements.wizardRiskPercentDisplay.textContent = `(${riskPercent.toFixed(2)}%)`;
+      this.elements.wizardRiskPercentDisplay.style.display = '';
+    } else {
+      this.elements.wizardRiskPercentDisplay.style.display = 'none';
+    }
+  }
+
+  updateTargetRDisplay() {
+    if (!this.elements.wizardRDisplay) return;
+
+    const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
+    const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
+    const target = parseFloat(this.elements.wizardTargetPrice?.value) || 0;
+
+    // Calculate R-Multiple
+    let rMultiple = 0;
+    if (entry > 0 && stop > 0 && target > 0 && entry !== stop) {
+      const risk = entry - stop;
+      const reward = target - entry;
+      rMultiple = reward / risk;
+    }
+
+    // Display formatted value
+    if (rMultiple !== 0) {
+      this.elements.wizardRDisplay.textContent = `(${rMultiple.toFixed(1)}R)`;
+      this.elements.wizardRDisplay.classList.toggle('negative', rMultiple < 0);
+      this.elements.wizardRDisplay.style.display = '';
+    } else {
+      this.elements.wizardRDisplay.style.display = 'none';
+    }
   }
 
   showSuccessToast() {

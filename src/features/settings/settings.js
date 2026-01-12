@@ -74,8 +74,6 @@ class Settings {
 
       // Settings inputs
       settingsAccountSize: document.getElementById('settingsAccountSize'),
-      dynamicAccountToggle: document.getElementById('dynamicAccountToggle'),
-      resetAccountBtn: document.getElementById('resetAccountBtn'),
 
       // Price tracking
       finnhubApiKey: document.getElementById('finnhubApiKey'),
@@ -190,13 +188,6 @@ class Settings {
       });
     }
 
-    // Dynamic account toggle
-    if (this.elements.dynamicAccountToggle) {
-      this.elements.dynamicAccountToggle.addEventListener('change', (e) => {
-        state.updateSettings({ dynamicAccountEnabled: e.target.checked });
-      });
-    }
-
     // Finnhub API Key
     if (this.elements.finnhubApiKey && this.elements.finnhubApiKeyBtn) {
       const saveApiKey = (apiKey) => {
@@ -277,11 +268,6 @@ class Settings {
       });
     }
 
-    // Reset account
-    if (this.elements.resetAccountBtn) {
-      this.elements.resetAccountBtn.addEventListener('click', () => this.resetAccount());
-    }
-
     // Cash Flow: Deposit
     if (this.elements.depositBtn) {
       this.elements.depositBtn.addEventListener('click', () => this.handleDeposit());
@@ -360,9 +346,6 @@ class Settings {
     // Apply to settings panel
     if (this.elements.settingsAccountSize) {
       this.elements.settingsAccountSize.value = formatWithCommas(state.settings.startingAccountSize);
-    }
-    if (this.elements.dynamicAccountToggle) {
-      this.elements.dynamicAccountToggle.checked = state.settings.dynamicAccountEnabled;
     }
 
     // Apply to main calculator
@@ -494,21 +477,6 @@ class Settings {
     }, 500);
   }
 
-  resetAccount() {
-    state.updateAccount({
-      realizedPnL: 0,
-      currentSize: state.settings.startingAccountSize
-    });
-
-    this.updateAccountDisplay(state.account.currentSize);
-    this.updateSummary();
-
-    // Emit for calculator to recalculate
-    state.emit('accountSizeChanged', state.account.currentSize);
-
-    showToast('🔄 Account reset to starting balance', 'success');
-  }
-
   handleDeposit() {
     if (!this.elements.depositAmount) return;
 
@@ -584,17 +552,24 @@ class Settings {
     const netCashFlow = state.getCashFlowNet();
 
     // Update summary values
-    if (this.elements.cashFlowNet) {
-      this.elements.cashFlowNet.textContent = formatCurrency(netCashFlow);
-      this.elements.cashFlowNet.style.color = netCashFlow >= 0 ? 'var(--success)' : 'var(--danger)';
-    }
-
     if (this.elements.cashFlowDeposits) {
-      this.elements.cashFlowDeposits.textContent = formatCurrency(cashFlow.totalDeposits);
+      this.elements.cashFlowDeposits.textContent = `+${formatCurrency(cashFlow.totalDeposits)}`;
     }
 
     if (this.elements.cashFlowWithdrawals) {
-      this.elements.cashFlowWithdrawals.textContent = formatCurrency(cashFlow.totalWithdrawals);
+      this.elements.cashFlowWithdrawals.textContent = `-${formatCurrency(cashFlow.totalWithdrawals)}`;
+    }
+
+    if (this.elements.cashFlowNet) {
+      this.elements.cashFlowNet.textContent = formatCurrency(netCashFlow);
+
+      // Color based on value: green if positive, red if negative, white if zero
+      this.elements.cashFlowNet.classList.remove('cash-flow-summary__value--success', 'cash-flow-summary__value--danger');
+      if (netCashFlow > 0) {
+        this.elements.cashFlowNet.classList.add('cash-flow-summary__value--success');
+      } else if (netCashFlow < 0) {
+        this.elements.cashFlowNet.classList.add('cash-flow-summary__value--danger');
+      }
     }
 
     // Update transaction history

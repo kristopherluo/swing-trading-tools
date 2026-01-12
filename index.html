@@ -504,12 +504,12 @@
       <div class="stats-section">
         <div class="stats-grid">
           <div class="stat-card" id="statCurrentAccountCard">
-            <span class="stat-card__label">P&L</span>
+            <span class="stat-card__label">Trading P&L</span>
             <span class="stat-card__value" id="statCurrentAccount">$0.00</span>
             <span class="stat-card__sub" id="statAccountChange">From starting account $0</span>
           </div>
           <div class="stat-card" id="statTradingGrowthCard">
-            <span class="stat-card__label">P&L %</span>
+            <span class="stat-card__label">Trading P&L %</span>
             <span class="stat-card__value" id="statTradingGrowth">0.00%</span>
             <span class="stat-card__sub">From starting</span>
           </div>
@@ -567,7 +567,7 @@
     <div class="settings-panel__content">
       <!-- Account Defaults -->
       <div class="settings-section" id="accountDefaultsSection">
-        <h3 class="settings-section__title">Account Defaults</h3>
+        <h3 class="settings-section__title">Account Details</h3>
 
         <div class="input-group">
           <label class="input-label" for="settingsAccountSize">Starting Account Balance</label>
@@ -576,18 +576,6 @@
             <input type="text" class="input input--mono" id="settingsAccountSize" value="10,000">
           </div>
         </div>
-      </div>
-
-      <!-- Dynamic Account Tracking -->
-      <div class="settings-section">
-        <h3 class="settings-section__title">Dynamic Account Tracking</h3>
-
-        <label class="toggle-switch">
-          <input type="checkbox" id="dynamicAccountToggle" checked>
-          <span class="toggle-switch__slider"></span>
-          <span class="toggle-switch__label">Enable dynamic account size</span>
-        </label>
-        <span class="input-hint">Account updates based on closed trade P&L</span>
 
         <div class="account-summary" id="accountSummary">
           <div class="account-summary__row">
@@ -611,10 +599,6 @@
             <span class="account-summary__value" id="summaryCurrent">$10,000.00</span>
           </div>
         </div>
-
-        <button class="btn btn--secondary btn--full" id="resetAccountBtn">
-          Reset to Starting Balance
-        </button>
       </div>
 
       <!-- Cash Flow Management -->
@@ -624,18 +608,16 @@
 
         <div class="cash-flow-summary">
           <div class="cash-flow-summary__row">
+            <span class="cash-flow-summary__label">Deposits</span>
+            <span class="cash-flow-summary__value cash-flow-summary__value--success" id="cashFlowDeposits">+$0.00</span>
+          </div>
+          <div class="cash-flow-summary__row">
+            <span class="cash-flow-summary__label">Withdrawals</span>
+            <span class="cash-flow-summary__value cash-flow-summary__value--danger" id="cashFlowWithdrawals">-$0.00</span>
+          </div>
+          <div class="cash-flow-summary__row cash-flow-summary__row--total">
             <span class="cash-flow-summary__label">Net Cash Flow</span>
             <span class="cash-flow-summary__value" id="cashFlowNet">$0.00</span>
-          </div>
-          <div class="cash-flow-summary__breakdown">
-            <div>
-              <span class="cash-flow-summary__sublabel">Deposits</span>
-              <span class="cash-flow-summary__subvalue cash-flow-summary__subvalue--success" id="cashFlowDeposits">$0.00</span>
-            </div>
-            <div>
-              <span class="cash-flow-summary__sublabel">Withdrawals</span>
-              <span class="cash-flow-summary__subvalue cash-flow-summary__subvalue--danger" id="cashFlowWithdrawals">$0.00</span>
-            </div>
           </div>
         </div>
 
@@ -874,7 +856,7 @@
       <!-- R-Multiple Selection -->
       <div class="trim-section">
         <label class="input-label">Exit at R-Multiple</label>
-        <div class="preset-group preset-group--compact">
+        <div class="preset-group preset-group--compact trim-r-multiple">
           <button type="button" class="preset-btn" data-r="1">1R</button>
           <button type="button" class="preset-btn" data-r="2">2R</button>
           <button type="button" class="preset-btn" data-r="3">3R</button>
@@ -903,7 +885,7 @@
       <!-- Trim Percentage Selection -->
       <div class="trim-section">
         <label class="input-label">Trim Percentage</label>
-        <div class="preset-group preset-group--compact">
+        <div class="preset-group preset-group--compact trim-percentage">
           <button type="button" class="preset-btn" data-trim="10">10%</button>
           <button type="button" class="preset-btn" data-trim="20">20%</button>
           <button type="button" class="preset-btn" data-trim="25">25%</button>
@@ -1049,7 +1031,7 @@
                 Stop Loss
                 <span class="tooltip">
                   <span class="tooltip__icon">?</span>
-                  <span class="tooltip__content">Your exit price if the trade goes against you. Set below your entry price for long positions to limit potential losses.</span>
+                  <span class="tooltip__content">Your exit price if the trade goes against you. Must be greater than 0.</span>
                 </span>
               </label>
               <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
@@ -1081,13 +1063,48 @@
           </div>
 
           <div class="input-group">
+            <label class="input-label" for="wizardRiskDollar">
+              Risk
+              <span class="tooltip">
+                <span class="tooltip__icon">?</span>
+                <span class="tooltip__content tooltip__content--left">How much of your account you're willing to risk on this trade. This is auto-calculated if Entry Price, Stop Loss, and Shares are all filled.</span>
+              </span>
+            </label>
+            <div class="preset-group preset-group--compact wizard-risk-percent" id="wizardRiskPercentGroup">
+              <button type="button" class="preset-btn" data-risk="0.1" disabled>0.1%</button>
+              <button type="button" class="preset-btn" data-risk="0.25" disabled>0.25%</button>
+              <button type="button" class="preset-btn" data-risk="0.5" disabled>0.5%</button>
+              <button type="button" class="preset-btn" data-risk="1" disabled>1%</button>
+              <button type="button" class="preset-btn" data-risk="2" disabled>2%</button>
+            </div>
+            <div class="input-wrapper input-wrapper--prefix">
+              <span class="input-prefix">$</span>
+              <input
+                type="text"
+                class="input input--mono"
+                id="wizardRiskDollar"
+                placeholder="0.00"
+                enterkeyhint="next"
+              >
+            </div>
+            <span class="wizard-risk-percent-display" id="wizardRiskPercentDisplay">(0.8%)</span>
+          </div>
+
+          <div class="input-group">
             <label class="input-label" for="wizardTargetPrice">
               Target Price <span class="label-optional">(optional)</span>
               <span class="tooltip">
                 <span class="tooltip__icon">?</span>
-                <span class="tooltip__content">Your profit target price. Use this to plan your risk/reward ratio before entering a trade. This will default to 5x your risk.</span>
+                <span class="tooltip__content">How many times your risk you want to target. Defaults to 5x your risk.</span>
               </span>
             </label>
+            <div class="preset-group preset-group--compact wizard-r-multiple" id="wizardRMultipleGroup">
+              <button type="button" class="preset-btn" data-r="1" disabled>1R</button>
+              <button type="button" class="preset-btn" data-r="2" disabled>2R</button>
+              <button type="button" class="preset-btn" data-r="3" disabled>3R</button>
+              <button type="button" class="preset-btn" data-r="4" disabled>4R</button>
+              <button type="button" class="preset-btn" data-r="5" disabled>5R</button>
+            </div>
             <div class="input-wrapper input-wrapper--prefix">
               <span class="input-prefix">$</span>
               <input
@@ -1098,6 +1115,7 @@
                 enterkeyhint="next"
               >
             </div>
+            <span class="wizard-r-display" id="wizardRDisplay">(5R)</span>
           </div>
 
           <div class="input-group">
@@ -1181,6 +1199,10 @@
               <span class="wizard-confirmation__label">Risk</span>
               <span class="wizard-confirmation__value wizard-confirmation__value--risk" id="wizardConfirmRisk">$0.00 (0%)</span>
             </div>
+            <div class="wizard-confirmation__row">
+              <span class="wizard-confirmation__label">Position Size</span>
+              <span class="wizard-confirmation__value" id="wizardConfirmPositionSize">$0.00 (0%)</span>
+            </div>
             <div class="wizard-confirmation__row" id="wizardConfirmDateRow">
               <span class="wizard-confirmation__label">Date</span>
               <span class="wizard-confirmation__value" id="wizardConfirmDate">—</span>
@@ -1210,7 +1232,7 @@
           <button class="btn btn--ghost" id="wizardCancel">Cancel</button>
           <div style="display: flex; gap: var(--space-3);">
             <button class="btn btn--ghost" id="wizardBack3">Back</button>
-            <button class="btn btn--success btn--pulse" id="wizardConfirmBtn">Log Trade</button>
+            <button class="btn btn--success" id="wizardConfirmBtn">Log Trade</button>
           </div>
         </div>
       </div>

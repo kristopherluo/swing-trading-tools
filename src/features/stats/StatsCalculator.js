@@ -190,8 +190,11 @@ export class StatsCalculator {
       endBalance = this.calculateCurrentAccount();
     }
 
-    // Calculate P&L
-    const pnl = endBalance - startBalance;
+    // Calculate net cash flow in range
+    const netCashFlowInRange = this.calculateNetCashFlow(dateFrom, dateTo);
+
+    // Calculate P&L (excluding cash flow)
+    const pnl = endBalance - startBalance - netCashFlowInRange;
 
     return {
       pnl: pnl,

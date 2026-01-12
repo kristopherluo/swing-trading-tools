@@ -101,14 +101,10 @@ export const dataManager = {
             localStorage.setItem('finnhubApiKey', data.apiKey);
           }
 
-          // Recalculate current account size including cash flow
+          // Recalculate current account size including cash flow (dynamic account tracking always enabled)
           const netCashFlow = (data.cashFlow?.totalDeposits || 0) - (data.cashFlow?.totalWithdrawals || 0);
-          if (state.settings.dynamicAccountEnabled) {
-            state.state.account.currentSize =
-              state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
-          } else {
-            state.state.account.currentSize = state.settings.startingAccountSize + netCashFlow;
-          }
+          state.state.account.currentSize =
+            state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
 
           // Refresh UI
           if (settingsModule) settingsModule.loadAndApply();

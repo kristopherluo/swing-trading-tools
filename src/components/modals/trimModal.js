@@ -254,11 +254,6 @@ class TrimModal {
     this.elements.modal?.querySelectorAll('[data-r]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    // Auto-suggest trim percentage based on 1/(1+R) rule
-    // 1R → 50%, 2R → 33%, 3R → 25%, 4R → 20%, 5R → 17%
-    const suggestedTrimPercent = Math.round((1 / (1 + this.selectedR)) * 100);
-    this.setTrimPercent(suggestedTrimPercent);
-
     this.calculateExitPrice();
     this.calculatePreview();
   }
@@ -621,13 +616,11 @@ class TrimModal {
           updates.pnl = newTotalRealizedPnL;
         }
 
-        // Update account size if dynamic accounting is enabled
-        if (state.settings.dynamicAccountEnabled) {
-          const netCashFlow = state.getCashFlowNet();
-          const newSize = state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
-          state.updateAccount({ currentSize: newSize });
-          state.emit('accountSizeChanged', newSize);
-        }
+        // Update account size (dynamic account tracking always enabled)
+        const netCashFlow = state.getCashFlowNet();
+        const newSize = state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
+        state.updateAccount({ currentSize: newSize });
+        state.emit('accountSizeChanged', newSize);
       }
 
       // Update the trade
@@ -755,12 +748,11 @@ class TrimModal {
     state.updateJournalEntry(this.currentTrade.id, updates);
     state.updateAccount({ realizedPnL: state.account.realizedPnL + pnl });
 
-    if (state.settings.dynamicAccountEnabled) {
-      const netCashFlow = state.getCashFlowNet();
-      const newSize = state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
-      state.updateAccount({ currentSize: newSize });
-      state.emit('accountSizeChanged', newSize);
-    }
+    // Update account size (dynamic account tracking always enabled)
+    const netCashFlow = state.getCashFlowNet();
+    const newSize = state.settings.startingAccountSize + state.account.realizedPnL + netCashFlow;
+    state.updateAccount({ currentSize: newSize });
+    state.emit('accountSizeChanged', newSize);
 
     const actionText = isFullClose ? 'closed' : `trimmed ${this.selectedTrimPercent}%`;
     showToast(
