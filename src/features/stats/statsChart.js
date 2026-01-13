@@ -13,6 +13,7 @@ class EquityChart {
     this.emptyState = null;
     this.dpr = window.devicePixelRatio || 1;
     this.tooltip = null;
+    this.data = null;
     this.chartData = null;
     this.chartScales = null;
     this.chartPadding = null;
@@ -57,13 +58,21 @@ class EquityChart {
     this.ctx = this.canvas.getContext('2d');
     this.resize();
 
-    // Handle resize
+    // Handle resize with debouncing
+    let resizeTimer;
     window.addEventListener('resize', () => {
-      this.resize();
-      // Re-render if we have data
-      if (this.data) {
-        this.render();
-      }
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        try {
+          this.resize();
+          // Trigger stats to re-render the chart with fresh data
+          if (stats && stats.renderEquityCurve) {
+            stats.renderEquityCurve();
+          }
+        } catch (error) {
+          console.error('[Chart] Error during resize:', error);
+        }
+      }, 100);
     });
 
     // Handle mouse events for tooltip
@@ -169,12 +178,12 @@ class EquityChart {
     const paddedRange = paddedMax - paddedMin;
 
     // X scale (time)
-    const dates = data.map(d => d.date);
+    const dates = data.map(d => new Date(d.date).getTime());
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);
     const dateRange = maxDate - minDate || 1;
 
-    const scaleX = (date) => padding.left + ((date - minDate) / dateRange) * chartWidth;
+    const scaleX = (date) => padding.left + ((new Date(date).getTime() - minDate) / dateRange) * chartWidth;
     const scaleY = (value) => padding.top + chartHeight - ((value - paddedMin) / paddedRange) * chartHeight;
 
     // Store data and scales for tooltip
@@ -313,20 +322,23 @@ class EquityChart {
     this.ctx.fillText(this.formatDate(endPoint.date), scaleX(endPoint.date), y);
   }
 
-  formatDate(timestamp) {
-    const date = new Date(timestamp);
-    const month = date.toLocaleDateString('en-US', { month: 'short' });
-    const day = date.getDate();
-    const year = date.getFullYear();
+  formatDate(dateStr) {
+    // Parse YYYY-MM-DD as local date to avoid timezone shifts
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+
+    const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+    const dayNum = date.getDate();
+    const yearNum = date.getFullYear();
 
     // Show month/day for recent dates, month/year for older ones
     const now = new Date();
-    const yearDiff = now.getFullYear() - year;
+    const yearDiff = now.getFullYear() - yearNum;
 
     if (yearDiff > 0) {
-      return `${month} ${year}`;
+      return `${monthName} ${yearNum}`;
     }
-    return `${month} ${day}`;
+    return `${monthName} ${dayNum}`;
   }
 
   formatCurrency(value) {
@@ -345,8 +357,10 @@ class EquityChart {
     });
   }
 
-  formatDateFull(timestamp) {
-    const date = new Date(timestamp);
+  formatDateFull(dateStr) {
+    // Parse YYYY-MM-DD as local date to avoid timezone shifts
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',

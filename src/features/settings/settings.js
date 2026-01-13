@@ -480,6 +480,14 @@ class Settings {
     // Calculate total: starting + realized + unrealized + cash flow
     const totalAccount = starting + realizedPnL + unrealizedPnL + cashFlow;
 
+    console.log('[Header Account]', {
+      starting,
+      realizedPnL,
+      unrealizedPnL,
+      cashFlow,
+      totalAccount
+    });
+
     if (this.elements.headerAccountValue) {
       const newText = formatCurrency(totalAccount);
       if (this.elements.headerAccountValue.textContent !== newText) {

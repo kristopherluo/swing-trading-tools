@@ -3,7 +3,7 @@
  */
 
 import { state } from '../../core/state.js';
-import { formatCurrency, formatNumber, disableWeekendsOnDateInput } from '../../core/utils.js';
+import { formatCurrency, formatNumber, disableWeekendsOnDateInput, getCurrentWeekday } from '../../core/utils.js';
 import { showToast } from '../ui/ui.js';
 
 class TrimModal {
@@ -134,7 +134,18 @@ class TrimModal {
 
   setDefaultDate() {
     if (this.elements.dateInput) {
-      this.elements.dateInput.value = new Date().toISOString().split('T')[0];
+      const today = getCurrentWeekday();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
+
+      this.elements.dateInput.value = dateString;
+
+      // If Flatpickr is initialized on this input, update it too
+      if (this.elements.dateInput._flatpickr) {
+        this.elements.dateInput._flatpickr.setDate(dateString, false);
+      }
     }
   }
 

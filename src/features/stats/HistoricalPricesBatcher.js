@@ -41,7 +41,7 @@ class HistoricalPricesBatcher {
     }
 
     try {
-      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=5000&apikey=${this.apiKey}`;
+      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=500&apikey=${this.apiKey}`;
 
       const response = await fetch(url);
       const data = await response.json();
@@ -343,6 +343,64 @@ class HistoricalPricesBatcher {
       totalDataPoints: totalDays,
       tickerList: tickers
     };
+  }
+
+  /**
+   * Clean up irrelevant data - only keep data relevant to actual trades
+   * @param {Array} allTrades - All trades from journal
+   */
+  cleanupOldData(allTrades = []) {
+    if (allTrades.length === 0) {
+      console.log('[HistoricalPrices] No trades found, skipping cleanup');
+      return 0;
+    }
+
+    // Get all tickers that have been traded
+    const tradedTickers = new Set(allTrades.map(t => t.ticker));
+
+    // Find earliest trade date (need data from then forward)
+    const earliestDate = allTrades.reduce((earliest, trade) => {
+      const tradeDate = trade.timestamp ? new Date(trade.timestamp).toISOString().split('T')[0] : null;
+      if (!tradeDate) return earliest;
+      return !earliest || tradeDate < earliest ? tradeDate : earliest;
+    }, null);
+
+    if (!earliestDate) {
+      console.log('[HistoricalPrices] No valid trade dates, skipping cleanup');
+      return 0;
+    }
+
+    let removedCount = 0;
+    const tickersToRemove = [];
+
+    // Remove tickers that were never traded
+    for (const ticker in this.cache) {
+      if (!tradedTickers.has(ticker)) {
+        tickersToRemove.push(ticker);
+        removedCount += Object.keys(this.cache[ticker]).length;
+        delete this.cache[ticker];
+        continue;
+      }
+
+      // For traded tickers, remove dates before earliest trade
+      const dates = Object.keys(this.cache[ticker]);
+      for (const date of dates) {
+        if (date < earliestDate) {
+          delete this.cache[ticker][date];
+          removedCount++;
+        }
+      }
+    }
+
+    if (removedCount > 0) {
+      console.log(`[HistoricalPrices] Cleaned up ${removedCount} irrelevant data points`);
+      if (tickersToRemove.length > 0) {
+        console.log(`[HistoricalPrices] Removed ${tickersToRemove.length} unused tickers:`, tickersToRemove.join(', '));
+      }
+      this.saveCache();
+    }
+
+    return removedCount;
   }
 }
 

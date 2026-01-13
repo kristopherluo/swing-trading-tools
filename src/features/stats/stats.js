@@ -12,6 +12,10 @@ import { DateRangeFilter } from '../../shared/DateRangeFilter.js';
 import { FilterPopup } from '../../shared/FilterPopup.js';
 import { sharedMetrics } from '../../shared/SharedMetrics.js';
 import { EquityChart } from './statsChart.js';
+import { priceTracker } from '../../core/priceTracker.js';
+import eodCacheManager from '../../core/eodCacheManager.js';
+import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
+import * as marketHours from '../../utils/marketHours.js';
 
 class Stats {
   constructor() {
@@ -22,6 +26,7 @@ class Stats {
     this.chart = null;
     this.isCalculating = false;
     this.filterPopup = null; // Shared filter popup component
+    this.autoRefreshInterval = null; // For auto-refreshing prices
 
     // Store flatpickr instances
     this.dateFromPicker = null;
@@ -78,8 +83,11 @@ class Stats {
     state.on('journalEntryAdded', (entry) => {
       try {
         equityCurveManager.invalidateForTrade(entry);
-        sharedMetrics.recalculateAll();
-        this.refresh();
+        // Only refresh if currently on stats page
+        if (state.ui.currentView === 'stats') {
+          sharedMetrics.recalculateAll();
+          this.refresh();
+        }
       } catch (error) {
         console.error('Error in journalEntryAdded handler:', error);
       }
@@ -87,8 +95,11 @@ class Stats {
     state.on('journalEntryUpdated', (entry) => {
       try {
         equityCurveManager.invalidateForTrade(entry);
-        sharedMetrics.recalculateAll();
-        this.refresh();
+        // Only refresh if currently on stats page
+        if (state.ui.currentView === 'stats') {
+          sharedMetrics.recalculateAll();
+          this.refresh();
+        }
       } catch (error) {
         console.error('Error in journalEntryUpdated handler:', error);
       }
@@ -96,8 +107,11 @@ class Stats {
     state.on('journalEntryDeleted', (entry) => {
       try {
         equityCurveManager.invalidateForTrade(entry);
-        sharedMetrics.recalculateAll();
-        this.refresh();
+        // Only refresh if currently on stats page
+        if (state.ui.currentView === 'stats') {
+          sharedMetrics.recalculateAll();
+          this.refresh();
+        }
       } catch (error) {
         console.error('Error in journalEntryDeleted handler:', error);
       }
@@ -105,7 +119,10 @@ class Stats {
     state.on('accountSizeChanged', () => {
       // Starting balance changed - affects all days
       equityCurveManager.invalidateCache();
-      this.refresh();
+      // Only refresh if currently on stats page
+      if (state.ui.currentView === 'stats') {
+        this.refresh();
+      }
     });
     state.on('cashFlowChanged', (cashFlow) => {
       try {
@@ -119,29 +136,43 @@ class Stats {
         } else {
           equityCurveManager.invalidateCache();
         }
-        this.refresh();
+        // Only refresh if currently on stats page
+        if (state.ui.currentView === 'stats') {
+          this.refresh();
+        }
       } catch (error) {
         console.error('Error in cashFlowChanged handler:', error);
         // Fallback to full invalidation
         equityCurveManager.invalidateCache();
-        this.refresh();
+        if (state.ui.currentView === 'stats') {
+          this.refresh();
+        }
       }
     });
     state.on('settingsChanged', () => {
       // Settings changed - affects all days (could be starting balance, etc.)
       equityCurveManager.invalidateCache();
-      this.refresh();
+      // Only refresh if currently on stats page
+      if (state.ui.currentView === 'stats') {
+        this.refresh();
+      }
     });
     state.on('pricesUpdated', () => {
-      sharedMetrics.recalculateAll();
-      this.refresh();
+      // Only refresh if we're currently on the stats page
+      if (state.ui.currentView === 'stats') {
+        sharedMetrics.recalculateAll();
+        this.refresh();
+      }
     });
     state.on('viewChanged', (data) => {
       if (data.to === 'stats') {
         this.animateStatCards();
+        this.startAutoRefresh(); // Start polling prices
         setTimeout(() => {
           this.refresh();
         }, 550);
+      } else if (data.from === 'stats') {
+        this.stopAutoRefresh(); // Stop polling when leaving stats page
       }
     });
 
@@ -170,11 +201,10 @@ class Stats {
     // Initialize Max preset dates
     this.handleDatePreset('max');
 
-    // Initial calculation and render
-    this.refresh();
-
+    // Initial calculation and render - ONLY if stats view is active
     const statsView = document.getElementById('statsView');
     if (statsView && statsView.classList.contains('view--active')) {
+      this.refresh();
       setTimeout(() => this.animateStatCards(), 100);
     }
   }
@@ -327,29 +357,19 @@ class Stats {
   async refresh() {
     if (this.isCalculating) return;
 
-    console.time('[Stats] refresh total');
     this.isCalculating = true;
     this.showLoadingState(true);
 
     try {
-      console.time('[Stats] calculate');
       await this.calculate();
-      console.timeEnd('[Stats] calculate');
-
-      console.time('[Stats] render');
       this.render();
-      console.timeEnd('[Stats] render');
-
-      console.time('[Stats] renderEquityCurve');
       await this.renderEquityCurve();
-      console.timeEnd('[Stats] renderEquityCurve');
     } catch (error) {
       console.error('Error refreshing stats:', error);
       showToast('Error calculating stats', 'error');
     } finally {
       this.showLoadingState(false);
       this.isCalculating = false;
-      console.timeEnd('[Stats] refresh total');
     }
   }
 
@@ -544,10 +564,22 @@ class Stats {
       const filterState = this.filters.getActiveFilter();
 
       // Build equity curve (uses cache if available!)
-      const curveData = await equityCurveManager.buildEquityCurve(
+      const curveObject = await equityCurveManager.buildEquityCurve(
         filterState.dateFrom,
         filterState.dateTo
       );
+
+      // Convert object to array format for chart
+      const curveData = Object.entries(curveObject)
+        .map(([date, data]) => ({
+          date,
+          balance: data.balance,
+          realizedBalance: data.realizedBalance,
+          unrealizedPnL: data.unrealizedPnL,
+          dayPnL: data.dayPnL,
+          cashFlow: data.cashFlow
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
 
       console.log('Equity curve data points:', curveData.length);
 
@@ -684,6 +716,215 @@ class Stats {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  }
+
+  /**
+   * Start auto-refreshing prices (every 60 seconds)
+   * Called when stats page becomes active
+   */
+  startAutoRefresh() {
+    if (!priceTracker.apiKey) {
+      console.log('[Stats] No Finnhub API key, skipping auto-refresh');
+      return;
+    }
+
+    // Clear any existing interval
+    this.stopAutoRefresh();
+
+    // Refresh immediately
+    this.refreshPrices(true);
+
+    // Set up 60-second interval
+    this.autoRefreshInterval = setInterval(() => {
+      this.refreshPrices(true);
+    }, 60000); // 60 seconds
+
+    console.log('[Stats] Started auto-refresh (60s interval)');
+  }
+
+  /**
+   * Stop auto-refreshing prices
+   * Called when leaving stats page
+   */
+  stopAutoRefresh() {
+    if (this.autoRefreshInterval) {
+      clearInterval(this.autoRefreshInterval);
+      this.autoRefreshInterval = null;
+      console.log('[Stats] Stopped auto-refresh');
+    }
+  }
+
+  /**
+   * Refresh prices from Finnhub
+   * Also checks if we should save EOD snapshot
+   * @param {boolean} silent - If true, don't show toast notifications
+   */
+  async refreshPrices(silent = false) {
+    try {
+      // Get all open/trimmed positions
+      const activeTrades = state.journal.entries.filter(
+        t => t.status === 'open' || t.status === 'trimmed'
+      );
+
+      if (activeTrades.length === 0) {
+        console.log('[Stats] No active trades to refresh prices for');
+        return;
+      }
+
+      // Fetch current prices from Finnhub
+      await priceTracker.refreshAllActivePrices();
+
+      // Check if we should save EOD snapshot
+      await this.checkAndSaveEOD();
+
+      // Recalculate stats with new prices
+      sharedMetrics.recalculateAll();
+
+      // Only calculate and render if we're on the stats page
+      if (state.ui.currentView === 'stats') {
+        this.calculate();
+        this.render();
+      }
+
+      if (!silent) {
+        showToast('Prices updated', 'success');
+      }
+    } catch (error) {
+      console.error('[Stats] Error refreshing prices:', error);
+      if (!silent) {
+        showToast('Error refreshing prices', 'error');
+      }
+    }
+  }
+
+  /**
+   * Check if we should save EOD snapshot
+   * Saves once per trading day after market close (4pm EST)
+   */
+  async checkAndSaveEOD() {
+    try {
+      const isAfterClose = marketHours.isAfterMarketClose();
+      const tradingDay = marketHours.getTradingDay();
+
+      // Only save if:
+      // 1. It's after market close (after 4pm EST, before next 9:30am EST)
+      // 2. We haven't already saved data for this trading day
+      if (isAfterClose && !eodCacheManager.hasEODData(tradingDay)) {
+        console.log(`[Stats] Market closed, saving EOD snapshot for ${tradingDay}`);
+        await this.saveEODSnapshot(tradingDay);
+      }
+    } catch (error) {
+      console.error('[Stats] Error checking/saving EOD:', error);
+    }
+  }
+
+  /**
+   * Save EOD snapshot for a specific trading day
+   * @param {string} dateStr - Date in 'YYYY-MM-DD' format
+   */
+  async saveEODSnapshot(dateStr) {
+    try {
+      // Get current prices (should be EOD prices if after 4pm)
+      const priceCache = priceTracker.cache || {};
+      const prices = {};
+      for (const [ticker, data] of Object.entries(priceCache)) {
+        if (data && data.price) {
+          prices[ticker] = data;
+        }
+      }
+
+      // Get trades that were open on this date
+      const openTrades = state.journal.entries.filter(trade => {
+        const isOpenOrTrimmed = trade.status === 'open' || trade.status === 'trimmed';
+        const entryDateStr = this._getEntryDateString(trade);
+        const enteredBefore = entryDateStr <= dateStr;
+        const notClosedYet = !trade.exitDate || trade.exitDate > dateStr;
+        return isOpenOrTrimmed && enteredBefore && notClosedYet;
+      });
+
+      // Build EOD prices map and track which tickers we have prices for
+      const stockPrices = {};
+      const positionsOwned = [];
+      const incompleteTickers = [];
+
+      for (const trade of openTrades) {
+        const priceData = prices[trade.ticker];
+        if (priceData && priceData.price) {
+          stockPrices[trade.ticker] = priceData.price;
+          positionsOwned.push(trade.ticker);
+        } else {
+          incompleteTickers.push(trade.ticker);
+        }
+      }
+
+      // Calculate balance using shared calculator
+      const balanceData = accountBalanceCalculator.calculateCurrentBalance({
+        startingBalance: state.settings.startingAccountSize,
+        allTrades: state.journal.entries,
+        cashFlowTransactions: state.cashFlow.transactions,
+        currentPrices: prices
+      });
+
+      // Calculate cash flow for this specific day
+      const dayCashFlow = accountBalanceCalculator.calculateDayCashFlow(
+        state.cashFlow.transactions,
+        dateStr
+      );
+
+      // Determine if data is complete
+      const isIncomplete = incompleteTickers.length > 0;
+
+      // Save snapshot
+      eodCacheManager.saveEODSnapshot(dateStr, {
+        balance: balanceData.balance,
+        realizedBalance: balanceData.realizedBalance,
+        unrealizedPnL: balanceData.unrealizedPnL,
+        stockPrices,
+        positionsOwned,
+        cashFlow: dayCashFlow,
+        timestamp: Date.now(),
+        source: 'finnhub',
+        incomplete: isIncomplete,
+        missingTickers: incompleteTickers
+      });
+
+      if (isIncomplete) {
+        console.warn(`[Stats] Saved incomplete EOD snapshot for ${dateStr}. Missing tickers:`, incompleteTickers);
+      } else {
+        console.log(`[Stats] Saved complete EOD snapshot for ${dateStr}:`, {
+          balance: balanceData.balance,
+          positions: positionsOwned.length
+        });
+      }
+    } catch (error) {
+      console.error(`[Stats] Failed to save EOD snapshot for ${dateStr}:`, error);
+
+      // Mark day as incomplete with error
+      eodCacheManager.saveEODSnapshot(dateStr, {
+        balance: 0,
+        incomplete: true,
+        error: error.message,
+        timestamp: Date.now(),
+        source: 'finnhub'
+      });
+    }
+  }
+
+  /**
+   * Get entry date string from trade timestamp
+   * Converts timestamp to 'YYYY-MM-DD' format
+   */
+  _getEntryDateString(trade) {
+    if (!trade.timestamp) return null;
+
+    // If timestamp is already a string in YYYY-MM-DD format, return it
+    if (typeof trade.timestamp === 'string' && trade.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return trade.timestamp.substring(0, 10);
+    }
+
+    // Otherwise convert to Date and format
+    const date = new Date(trade.timestamp);
+    return marketHours.formatDate(date);
   }
 }
 

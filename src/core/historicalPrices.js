@@ -43,8 +43,8 @@ class HistoricalPrices {
     }
 
     try {
-      // Twelve Data API endpoint - outputsize: 5000 for max data
-      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=5000&apikey=${this.apiKey}`;
+      // Twelve Data API endpoint - outputsize: 500 for ~2 years of data
+      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=500&apikey=${this.apiKey}`;
 
       const response = await fetch(url);
       const data = await response.json();

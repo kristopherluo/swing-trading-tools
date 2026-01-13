@@ -1200,24 +1200,42 @@ class JournalView {
       return;
     }
 
-    // Import priceTracker
-    const { priceTracker } = await import('../../core/priceTracker.js');
+    // Import historicalPricesBatcher (shares cache with stats page!)
+    const { historicalPricesBatcher } = await import('../stats/HistoricalPricesBatcher.js');
 
     try {
       let candles;
 
-      // Check if we have cached data for today
-      const cachedData = this.getCachedChartData(trade.ticker);
+      // UPDATED: Use historicalPricesBatcher which has permanent cache shared with stats
+      // Check if we have cached historical data for this ticker
+      const cachedPriceData = historicalPricesBatcher.cache[trade.ticker];
 
-      if (cachedData) {
-        candles = cachedData;
+      const entryDate = new Date(trade.timestamp).toISOString().split('T')[0];
+      const closeDate = trade.exitDate || new Date().toISOString().split('T')[0];
+
+      // Show 6 months before entry for context
+      const contextStartDate = new Date(trade.timestamp);
+      contextStartDate.setMonth(contextStartDate.getMonth() - 6);
+      const chartStartDate = contextStartDate.toISOString().split('T')[0];
+
+      // Show 5 days after exit for context (if closed)
+      let chartEndDate = closeDate;
+      if (trade.exitDate) {
+        const contextEndDate = new Date(trade.exitDate);
+        contextEndDate.setDate(contextEndDate.getDate() + 5);
+        chartEndDate = contextEndDate.toISOString().split('T')[0];
+      }
+
+      if (cachedPriceData && this._hasDataForDateRange(cachedPriceData, chartStartDate, chartEndDate)) {
+        // Use cached data - convert to candle format
+        candles = this._convertPricesToCandles(cachedPriceData, chartStartDate, chartEndDate);
       } else {
-        // Fetch historical candles - 1 year back + 3 months forward
-        const entryDate = new Date(trade.timestamp);
-        candles = await priceTracker.fetchHistoricalCandles(trade.ticker, entryDate);
+        // Fetch from Twelve Data (will be cached permanently by historicalPricesBatcher)
+        await historicalPricesBatcher.batchFetchPrices([trade.ticker]);
 
-        // Save to cache
-        this.saveChartData(trade.ticker, candles);
+        // Now get the cached data
+        const freshData = historicalPricesBatcher.cache[trade.ticker];
+        candles = this._convertPricesToCandles(freshData, chartStartDate, chartEndDate);
       }
 
       // Clear loading message
@@ -1513,6 +1531,48 @@ class JournalView {
         summaryContainer.style.color = 'var(--text-muted)';
       }
     }
+  }
+
+  /**
+   * Check if cached price data covers the needed date range
+   * @param {Object} cachedData - Cached price data (dateStr -> {open, high, low, close})
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @returns {boolean} True if we have data covering the range
+   */
+  _hasDataForDateRange(cachedData, startDate, endDate) {
+    if (!cachedData || Object.keys(cachedData).length === 0) {
+      return false;
+    }
+
+    // Check if we have some data in the range
+    const dates = Object.keys(cachedData);
+    const hasDataInRange = dates.some(d => d >= startDate && d <= endDate);
+
+    return hasDataInRange;
+  }
+
+  /**
+   * Convert cached price data to candle format for chart
+   * @param {Object} priceData - Price data (dateStr -> {open, high, low, close, volume})
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @returns {Array} Array of candles in chart format
+   */
+  _convertPricesToCandles(priceData, startDate, endDate) {
+    if (!priceData) return [];
+
+    return Object.entries(priceData)
+      .filter(([date]) => date >= startDate && date <= endDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({
+        time: date,
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        volume: data.volume || 0
+      }));
   }
 }
 

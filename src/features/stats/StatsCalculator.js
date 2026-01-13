@@ -7,25 +7,37 @@ import { state } from '../../core/state.js';
 import { priceTracker } from '../../core/priceTracker.js';
 import { equityCurveManager } from './EquityCurveManager.js';
 import { getPreviousBusinessDay } from '../../core/utils.js';
+import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
 
 export class StatsCalculator {
   /**
    * Calculate current account balance (includes unrealized P&L)
    * Always uses ALL trades, not filtered
+   * NOW USES SHARED CALCULATOR
    */
   calculateCurrentAccount() {
-    const allEntries = state.journal.entries;
-    const startingAccount = state.settings.startingAccountSize;
+    // Get current prices from priceTracker (convert Map to object)
+    const priceMap = priceTracker.cache || new Map();
+    const currentPrices = Object.fromEntries(priceMap);
 
-    const allClosedTrades = allEntries.filter(e => e.status === 'closed' || e.status === 'trimmed');
-    const allTimePnL = allClosedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+    // Use shared account balance calculator
+    const result = accountBalanceCalculator.calculateCurrentBalance({
+      startingBalance: state.settings.startingAccountSize,
+      allTrades: state.journal.entries,
+      cashFlowTransactions: state.cashFlow.transactions,
+      currentPrices
+    });
 
-    const allOpenTrades = allEntries.filter(e => e.status === 'open' || e.status === 'trimmed');
-    const unrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
+    console.log('[Stats CurrentAccount]', {
+      starting: state.settings.startingAccountSize,
+      realizedPnL: result.realizedPnL,
+      unrealizedPnL: result.unrealizedPnL,
+      cashFlow: result.cashFlow,
+      balance: result.balance,
+      pricesCached: Object.keys(currentPrices).length
+    });
 
-    const allTimeCashFlow = state.getCashFlowNet();
-
-    return startingAccount + allTimePnL + (unrealizedPnL?.totalPnL || 0) + allTimeCashFlow;
+    return result.balance;
   }
 
   /**
@@ -217,8 +229,8 @@ export class StatsCalculator {
     const closedTradesBeforeDate = allEntries
       .filter(e => e.status === 'closed' || e.status === 'trimmed')
       .filter(e => {
-        if (!e.closeDate) return false;
-        const closeDate = new Date(e.closeDate);
+        if (!e.exitDate) return false;
+        const closeDate = new Date(e.exitDate);
         closeDate.setHours(0, 0, 0, 0);
         return closeDate <= targetDate;
       });
@@ -243,8 +255,8 @@ export class StatsCalculator {
       if (entryDate > targetDate) return false;
 
       // If closed, must close after this date
-      if (e.status === 'closed' && e.closeDate) {
-        const closeDate = new Date(e.closeDate);
+      if (e.status === 'closed' && e.exitDate) {
+        const closeDate = new Date(e.exitDate);
         closeDate.setHours(0, 0, 0, 0);
         if (closeDate <= targetDate) return false;
       }

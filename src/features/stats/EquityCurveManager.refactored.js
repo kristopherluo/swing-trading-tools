@@ -10,10 +10,10 @@
 
 import { state } from '../../core/state.js';
 import { historicalPricesBatcher } from './HistoricalPricesBatcher.js';
+import priceTracker from '../../core/priceTracker.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
 import * as marketHours from '../../utils/marketHours.js';
-import { priceTracker } from '../../core/priceTracker.js';
 
 class EquityCurveManager {
   constructor() {
@@ -31,6 +31,7 @@ class EquityCurveManager {
       return this.equityCurve;
     }
 
+    console.time('[EquityCurve] buildEquityCurve');
     this.isBuilding = true;
 
     try {
@@ -58,6 +59,7 @@ class EquityCurveManager {
       // Build equity curve from EOD cache
       this.equityCurve = this._buildCurveFromEODCache(startDate, endDate);
 
+      console.timeEnd('[EquityCurve] buildEquityCurve');
       return this.equityCurve;
 
     } catch (error) {
@@ -74,6 +76,7 @@ class EquityCurveManager {
    * Loads from most recent to oldest, respects rate limits
    */
   async buildEquityCurveIncremental(onProgress) {
+    console.time('[EquityCurve] buildEquityCurveIncremental');
 
     const endDate = marketHours.formatDate(new Date());
     const startDate = this._getEarliestTradeDate();
@@ -131,6 +134,7 @@ class EquityCurveManager {
     // Build final curve
     this.equityCurve = this._buildCurveFromEODCache(startDate, endDate);
 
+    console.timeEnd('[EquityCurve] buildEquityCurveIncremental');
     return this.equityCurve;
   }
 
@@ -139,6 +143,7 @@ class EquityCurveManager {
    * Used when past trades are added/edited/deleted
    */
   async waterfallUpdate(startDate) {
+    console.time('[EquityCurve] waterfallUpdate');
     console.log(`[EquityCurve] Waterfall updating from ${startDate}`);
 
     const endDate = marketHours.formatDate(new Date());
@@ -187,6 +192,7 @@ class EquityCurveManager {
     // Rebuild equity curve from updated cache
     await this.buildEquityCurve();
 
+    console.timeEnd('[EquityCurve] waterfallUpdate');
   }
 
   /**
@@ -213,15 +219,6 @@ class EquityCurveManager {
   }
 
   /**
-   * Invalidate from a specific date forward
-   * Used when cash flow or other changes affect historical data
-   */
-  invalidateFromDate(dateStr) {
-    console.log(`[EquityCurve] Invalidating from date: ${dateStr}`);
-    eodCacheManager.invalidateDaysFromDate(dateStr);
-  }
-
-  /**
    * Get the equity curve data
    */
   getCurve() {
@@ -236,44 +233,18 @@ class EquityCurveManager {
     return curve[dateStr]?.balance || null;
   }
 
-  /**
-   * Legacy method name for compatibility
-   */
-  getEODBalance(dateStr) {
-    return this.getBalanceOnDate(dateStr);
-  }
-
   // =============================================================================
   // PRIVATE METHODS
   // =============================================================================
 
   /**
    * Build equity curve from EOD cache
-   * For today's date, uses current prices instead of cached EOD
    */
   _buildCurveFromEODCache(startDate, endDate) {
     const curve = {};
     const businessDays = marketHours.getBusinessDaysBetween(startDate, endDate);
-    const todayStr = marketHours.formatDate(new Date());
 
     for (const dateStr of businessDays) {
-      // Special handling for today: use current prices instead of cached EOD
-      if (dateStr === todayStr) {
-        const currentBalance = this._calculateCurrentBalance();
-
-        if (currentBalance !== null) {
-          curve[dateStr] = {
-            balance: currentBalance.balance,
-            realizedBalance: currentBalance.realizedBalance,
-            unrealizedPnL: currentBalance.unrealizedPnL,
-            dayPnL: accountBalanceCalculator.calculateDayPnL(state.journal.entries, dateStr),
-            cashFlow: currentBalance.cashFlow
-          };
-          continue;
-        }
-      }
-
-      // For past dates: use EOD cache
       const eodData = eodCacheManager.getEODData(dateStr);
 
       if (eodData && !eodData.incomplete) {
@@ -314,16 +285,7 @@ class EquityCurveManager {
     }
 
     if (allTickers.size === 0) {
-      console.log('[EquityCurve] No positions open on missing days, saving balance-only snapshots');
-
-      // Still save EOD data for these days (just with no positions/unrealized P&L)
-      for (const day of missingDays) {
-        const eodData = await this._calculateEODForDay(day, []);
-        eodCacheManager.saveEODSnapshot(day, {
-          ...eodData,
-          source: 'no_positions'
-        });
-      }
+      console.log('[EquityCurve] No positions open on missing days');
       return;
     }
 
@@ -369,7 +331,7 @@ class EquityCurveManager {
     for (const ticker of openTickers) {
       const price = await historicalPricesBatcher.getPriceOnDate(ticker, dateStr);
       if (price) {
-        stockPrices[ticker] = price;
+        stockPrices[ticker] = price.close;
       }
     }
 
@@ -430,13 +392,11 @@ class EquityCurveManager {
 
   /**
    * Get trades that were open on a specific date
-   * Includes trades that closed ON this date (need EOD price for that day)
    */
   _getTradesOpenOnDate(dateStr) {
     return state.journal.entries.filter(trade => {
-      const entryDateStr = this._getEntryDateString(trade);
-      const enteredBefore = entryDateStr <= dateStr;
-      const notClosedYet = !trade.exitDate || trade.exitDate >= dateStr; // >= to include trades closed on this day
+      const enteredBefore = trade.entryDate <= dateStr;
+      const notClosedYet = !trade.closeDate || trade.closeDate > dateStr;
       return enteredBefore && notClosedYet;
     });
   }
@@ -445,7 +405,7 @@ class EquityCurveManager {
    * Check if we have historical prices for a ticker for entire date range
    */
   _hasHistoricalPricesForRange(ticker, startDate, endDate) {
-    const cacheData = historicalPricesBatcher.cache[ticker];
+    const cacheData = historicalPricesBatcher.getCachedData(ticker);
     if (!cacheData) return false;
 
     const businessDays = marketHours.getBusinessDaysBetween(startDate, endDate);
@@ -468,8 +428,7 @@ class EquityCurveManager {
     if (trades.length === 0) return null;
 
     return trades.reduce((earliest, trade) => {
-      const entryDateStr = this._getEntryDateString(trade);
-      return !earliest || entryDateStr < earliest ? entryDateStr : earliest;
+      return !earliest || trade.entryDate < earliest ? trade.entryDate : earliest;
     }, null);
   }
 
@@ -477,10 +436,10 @@ class EquityCurveManager {
    * Get the affected start date for a trade (for waterfall updates)
    */
   _getTradeAffectedStartDate(trade) {
-    const dates = [this._getEntryDateString(trade)];
+    const dates = [trade.entryDate];
 
-    if (trade.exitDate) {
-      dates.push(trade.exitDate);
+    if (trade.closeDate) {
+      dates.push(trade.closeDate);
     }
 
     if (trade.trimHistory && trade.trimHistory.length > 0) {
@@ -508,61 +467,6 @@ class EquityCurveManager {
    */
   _sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Get entry date string from trade timestamp
-   * Converts timestamp to 'YYYY-MM-DD' format
-   */
-  _getEntryDateString(trade) {
-    if (!trade.timestamp) return null;
-
-    // If timestamp is already a string in YYYY-MM-DD format, return it
-    if (typeof trade.timestamp === 'string' && trade.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
-      return trade.timestamp.substring(0, 10);
-    }
-
-    // Otherwise convert to Date and format
-    const date = new Date(trade.timestamp);
-    return marketHours.formatDate(date);
-  }
-
-  /**
-   * Calculate current balance using live prices from priceTracker
-   * Used for today's equity curve data point
-   */
-  _calculateCurrentBalance() {
-    try {
-      // Get current prices from priceTracker (convert Map to object)
-      const priceMap = priceTracker.cache || new Map();
-      const currentPrices = Object.fromEntries(priceMap);
-
-      // Use shared account balance calculator with current prices
-      const result = accountBalanceCalculator.calculateCurrentBalance({
-        startingBalance: state.settings.startingAccountSize,
-        allTrades: state.journal.entries,
-        cashFlowTransactions: state.cashFlow.transactions,
-        currentPrices
-      });
-
-      console.log('[EquityCurve] Using current prices for today:', {
-        balance: result.balance,
-        realizedPnL: result.realizedPnL,
-        unrealizedPnL: result.unrealizedPnL,
-        cashFlow: result.cashFlow,
-        pricesCached: Object.keys(currentPrices).length
-      });
-
-      return {
-        balance: result.balance,
-        realizedBalance: result.realizedBalance,
-        unrealizedPnL: result.unrealizedPnL,
-        cashFlow: result.cashFlow
-      };
-    } catch (error) {
-      console.error('[EquityCurve] Error calculating current balance:', error);
-      return null;
-    }
   }
 }
 

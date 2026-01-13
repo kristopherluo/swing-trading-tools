@@ -1,11 +1,13 @@
 /**
  * Price Tracker - Fetches real-time stock prices from Finnhub API
+ * UPDATED: Uses trading day logic for cache expiry (9:30am EST boundary)
  */
 
 import { state } from './state.js';
+import * as marketHours from '../utils/marketHours.js';
 
 const CACHE_KEY = 'riskCalcPriceCache';
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours (legacy, now uses trading day)
 
 export const priceTracker = {
   apiKey: null,
@@ -24,12 +26,19 @@ export const priceTracker = {
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
-        const { prices, date } = JSON.parse(cached);
+        const { prices, date, tradingDay } = JSON.parse(cached);
         this.lastFetchDate = new Date(date);
 
-        // Check if cache is still valid (same day)
-        if (this.isSameDay(this.lastFetchDate, new Date())) {
+        // Check if cache is still valid (same trading day)
+        // A trading day runs from 9:30am EST to next 9:30am EST
+        const currentTradingDay = marketHours.getTradingDay();
+        if (tradingDay && tradingDay === currentTradingDay) {
           this.cache = new Map(Object.entries(prices));
+        } else {
+          // Legacy: fall back to calendar day check for old cache format
+          if (this.isSameDay(this.lastFetchDate, new Date())) {
+            this.cache = new Map(Object.entries(prices));
+          }
         }
       }
     } catch (e) {
@@ -40,9 +49,11 @@ export const priceTracker = {
   saveCache() {
     try {
       const prices = Object.fromEntries(this.cache);
+      const now = new Date();
       localStorage.setItem(CACHE_KEY, JSON.stringify({
         prices,
-        date: new Date().toISOString()
+        date: now.toISOString(),
+        tradingDay: marketHours.getTradingDay(now) // Store trading day for proper expiry
       }));
     } catch (e) {
       console.error('Failed to save price cache:', e);
@@ -50,14 +61,16 @@ export const priceTracker = {
   },
 
   isSameDay(date1, date2) {
+    // Legacy method - kept for backwards compatibility
     return date1.getFullYear() === date2.getFullYear() &&
            date1.getMonth() === date2.getMonth() &&
            date1.getDate() === date2.getDate();
   },
 
   needsRefresh() {
-    if (!this.lastFetchDate) return true;
-    return !this.isSameDay(this.lastFetchDate, new Date());
+    // Prices are always "current" for the current trading day
+    // No need to refresh if we're still in the same trading day
+    return false; // Let the auto-refresh interval handle refreshing
   },
 
   async fetchPrice(ticker) {
