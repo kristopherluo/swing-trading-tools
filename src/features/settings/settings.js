@@ -17,6 +17,8 @@ class Settings {
     // Store flatpickr instances
     this.depositDatePicker = null;
     this.withdrawDatePicker = null;
+    // Store previous valid starting account size
+    this.previousValidAccountSize = null;
   }
 
   init() {
@@ -75,6 +77,7 @@ class Settings {
 
       // Settings inputs
       settingsAccountSize: document.getElementById('settingsAccountSize'),
+      settingsAccountSizeError: document.getElementById('settingsAccountSizeError'),
 
       // Price tracking
       finnhubApiKey: document.getElementById('finnhubApiKey'),
@@ -94,9 +97,11 @@ class Settings {
       cashFlowDeposits: document.getElementById('cashFlowDeposits'),
       cashFlowWithdrawals: document.getElementById('cashFlowWithdrawals'),
       depositAmount: document.getElementById('depositAmount'),
+      depositAmountError: document.getElementById('depositAmountError'),
       depositDate: document.getElementById('depositDate'),
       depositBtn: document.getElementById('depositBtn'),
       withdrawAmount: document.getElementById('withdrawAmount'),
+      withdrawAmountError: document.getElementById('withdrawAmountError'),
       withdrawDate: document.getElementById('withdrawDate'),
       withdrawBtn: document.getElementById('withdrawBtn'),
       cashFlowHistory: document.getElementById('cashFlowHistory'),
@@ -131,6 +136,11 @@ class Settings {
     // Settings account size with K/M instant conversion
     if (this.elements.settingsAccountSize) {
       const syncAccountSize = (value) => {
+        // Only sync if value is valid (> 0)
+        if (value <= 0) {
+          return false;
+        }
+
         state.updateSettings({ startingAccountSize: value });
 
         // Calculate new current size: starting + realized P&L + net cash flow
@@ -148,15 +158,23 @@ class Settings {
         }
         this.updateAccountDisplay(newCurrentSize);
         state.emit('accountSizeChanged', newCurrentSize);
+
+        // Store as previous valid value
+        this.previousValidAccountSize = value;
+        return true;
       };
 
+      // Real-time sanitization and validation
       this.elements.settingsAccountSize.addEventListener('input', (e) => {
+        // Sanitize and validate as user types
+        this.sanitizeAccountSizeInput(e);
+
         const inputValue = e.target.value.trim();
 
         // Instant format when K/M notation is used
         if (inputValue && (inputValue.toLowerCase().includes('k') || inputValue.toLowerCase().includes('m'))) {
           const converted = parseNumber(inputValue);
-          if (converted !== null) {
+          if (converted !== null && converted > 0) {
             const cursorPosition = e.target.selectionStart;
             const originalLength = e.target.value.length;
             e.target.value = formatWithCommas(converted);
@@ -170,9 +188,16 @@ class Settings {
 
       this.elements.settingsAccountSize.addEventListener('blur', (e) => {
         const value = parseNumber(e.target.value);
-        if (value) {
+        if (value && value > 0) {
           e.target.value = formatWithCommas(value);
           syncAccountSize(value);
+        } else if (value && value <= 0) {
+          // Show error if value is <= 0
+          this.showInputError(
+            this.elements.settingsAccountSize,
+            this.elements.settingsAccountSizeError,
+            'Starting account balance must be greater than 0'
+          );
         }
       });
 
@@ -180,9 +205,17 @@ class Settings {
         if (e.key === 'Enter') {
           e.preventDefault();
           const value = parseNumber(e.target.value);
-          if (value) {
+          if (value && value > 0) {
             e.target.value = formatWithCommas(value);
             syncAccountSize(value);
+            this.clearInputError(this.elements.settingsAccountSize, this.elements.settingsAccountSizeError);
+          } else if (value && value <= 0) {
+            // Show error if value is <= 0
+            this.showInputError(
+              this.elements.settingsAccountSize,
+              this.elements.settingsAccountSizeError,
+              'Starting account balance must be greater than 0'
+            );
           }
           e.target.blur();
         }
@@ -288,6 +321,10 @@ class Settings {
     }
 
     // Cash Flow: Deposit
+    if (this.elements.depositAmount) {
+      // Real-time validation
+      this.elements.depositAmount.addEventListener('input', (e) => this.sanitizeDepositInput(e));
+    }
     if (this.elements.depositBtn) {
       this.elements.depositBtn.addEventListener('click', () => this.handleDeposit());
     }
@@ -301,6 +338,10 @@ class Settings {
     }
 
     // Cash Flow: Withdraw
+    if (this.elements.withdrawAmount) {
+      // Real-time validation
+      this.elements.withdrawAmount.addEventListener('input', (e) => this.sanitizeWithdrawInput(e));
+    }
     if (this.elements.withdrawBtn) {
       this.elements.withdrawBtn.addEventListener('click', () => this.handleWithdraw());
     }
@@ -384,6 +425,11 @@ class Settings {
     if (this.elements.finnhubApiKey) {
       this.elements.finnhubApiKey.value = finnhubKey;
     }
+    // Set Finnhub key in priceTracker and activate button if key exists
+    if (finnhubKey) {
+      priceTracker.setApiKey(finnhubKey);
+      this.setApiKeyButtonActive(this.elements.finnhubApiKeyBtn);
+    }
 
     const twelveDataKey = localStorage.getItem('twelveDataApiKey') || '';
     if (this.elements.twelveDataApiKey) {
@@ -393,11 +439,15 @@ class Settings {
     if (twelveDataKey) {
       historicalPrices.setApiKey(twelveDataKey);
       historicalPricesBatcher.setApiKey(twelveDataKey); // Also set for new batcher
+      this.setApiKeyButtonActive(this.elements.twelveDataApiKeyBtn);
     }
 
     const alphaVantageKey = localStorage.getItem('alphaVantageApiKey') || '';
     if (this.elements.alphaVantageApiKey) {
       this.elements.alphaVantageApiKey.value = alphaVantageKey;
+    }
+    if (alphaVantageKey) {
+      this.setApiKeyButtonActive(this.elements.alphaVantageApiKeyBtn);
     }
 
     // Update header
@@ -413,9 +463,26 @@ class Settings {
     document.body.style.overflow = 'hidden';
     state.setUI('settingsOpen', true);
     this.updateSummary();
+
+    // Store current valid starting account size
+    this.previousValidAccountSize = state.settings.startingAccountSize;
+
+    // Clear any existing errors
+    this.clearInputError(this.elements.settingsAccountSize, this.elements.settingsAccountSizeError);
   }
 
   close() {
+    // Check if current account size value is invalid
+    const currentValue = parseNumber(this.elements.settingsAccountSize?.value);
+
+    if (!currentValue || currentValue <= 0) {
+      // Restore previous valid value
+      if (this.previousValidAccountSize && this.previousValidAccountSize > 0) {
+        this.elements.settingsAccountSize.value = formatWithCommas(this.previousValidAccountSize);
+        this.clearInputError(this.elements.settingsAccountSize, this.elements.settingsAccountSizeError);
+      }
+    }
+
     this.elements.settingsPanel?.classList.remove('open');
     this.elements.settingsOverlay?.classList.remove('open');
     document.body.style.overflow = '';
@@ -480,14 +547,6 @@ class Settings {
     // Calculate total: starting + realized + unrealized + cash flow
     const totalAccount = starting + realizedPnL + unrealizedPnL + cashFlow;
 
-    console.log('[Header Account]', {
-      starting,
-      realizedPnL,
-      unrealizedPnL,
-      cashFlow,
-      totalAccount
-    });
-
     if (this.elements.headerAccountValue) {
       const newText = formatCurrency(totalAccount);
       if (this.elements.headerAccountValue.textContent !== newText) {
@@ -514,9 +573,16 @@ class Settings {
   handleDeposit() {
     if (!this.elements.depositAmount) return;
 
+    // Clear any previous error
+    this.clearInputError(this.elements.depositAmount, this.elements.depositAmountError);
+
     const amount = parseNumber(this.elements.depositAmount.value);
     if (!amount || amount <= 0) {
-      showToast('⚠️ Please enter a valid deposit amount', 'warning');
+      this.showInputError(
+        this.elements.depositAmount,
+        this.elements.depositAmountError,
+        'Please enter a valid deposit amount'
+      );
       return;
     }
 
@@ -542,9 +608,16 @@ class Settings {
   handleWithdraw() {
     if (!this.elements.withdrawAmount) return;
 
+    // Clear any previous error
+    this.clearInputError(this.elements.withdrawAmount, this.elements.withdrawAmountError);
+
     const amount = parseNumber(this.elements.withdrawAmount.value);
     if (!amount || amount <= 0) {
-      showToast('⚠️ Please enter a valid withdrawal amount', 'warning');
+      this.showInputError(
+        this.elements.withdrawAmount,
+        this.elements.withdrawAmountError,
+        'Please enter a valid withdrawal amount'
+      );
       return;
     }
 
@@ -677,8 +750,8 @@ class Settings {
 
     button.textContent = 'Active';
     button.disabled = true;
-    button.classList.remove('btn--primary');
-    button.classList.add('btn--success');
+    button.classList.add('active');
+    // Keep btn--primary for neon/cyberpunk theme instead of solid green
   }
 
   setApiKeyButtonInactive(button) {
@@ -686,8 +759,143 @@ class Settings {
 
     button.textContent = 'Use Key';
     button.disabled = false;
-    button.classList.remove('btn--success');
-    button.classList.add('btn--primary');
+    button.classList.remove('active');
+  }
+
+  /**
+   * Show inline error for an input field
+   */
+  showInputError(inputElement, errorElement, message) {
+    if (inputElement) {
+      inputElement.classList.add('input--error');
+    }
+    if (errorElement) {
+      errorElement.textContent = message;
+      errorElement.classList.add('input-error--visible');
+    }
+  }
+
+  /**
+   * Clear inline error for an input field
+   */
+  clearInputError(inputElement, errorElement) {
+    if (inputElement) {
+      inputElement.classList.remove('input--error');
+    }
+    if (errorElement) {
+      errorElement.classList.remove('input-error--visible');
+      errorElement.textContent = '';
+    }
+  }
+
+  /**
+   * Sanitize decimal input - only allow numbers and one decimal point
+   */
+  sanitizeDecimalInput(e) {
+    const input = e.target;
+    const originalValue = input.value;
+    let value = originalValue;
+
+    // Allow only numbers and one decimal point
+    value = value.replace(/[^\d.]/g, '');
+
+    // Allow only one decimal point
+    const parts = value.split('.');
+    if (parts.length > 2) {
+      value = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Only update if value changed (to avoid triggering another input event)
+    if (value !== originalValue) {
+      input.value = value;
+    }
+  }
+
+  /**
+   * Sanitize and validate account size input
+   */
+  sanitizeAccountSizeInput(e) {
+    // First apply decimal sanitization
+    this.sanitizeDecimalInput(e);
+
+    // Clear error first
+    this.clearInputError(this.elements.settingsAccountSize, this.elements.settingsAccountSizeError);
+
+    const value = this.elements.settingsAccountSize?.value.trim();
+
+    // Skip validation if field is empty (will validate on blur/enter)
+    if (!value) {
+      return;
+    }
+
+    // Parse the value (supports K/M notation)
+    const parsedValue = parseNumber(value);
+
+    if (parsedValue !== null && parsedValue <= 0) {
+      this.showInputError(
+        this.elements.settingsAccountSize,
+        this.elements.settingsAccountSizeError,
+        'Starting account balance must be greater than 0'
+      );
+    }
+  }
+
+  /**
+   * Sanitize and validate deposit amount input
+   */
+  sanitizeDepositInput(e) {
+    // First apply decimal sanitization
+    this.sanitizeDecimalInput(e);
+
+    // Clear error first
+    this.clearInputError(this.elements.depositAmount, this.elements.depositAmountError);
+
+    const value = this.elements.depositAmount?.value.trim();
+
+    // Skip validation if field is empty
+    if (!value) {
+      return;
+    }
+
+    // Parse the value
+    const parsedValue = parseNumber(value);
+
+    if (parsedValue !== null && parsedValue <= 0) {
+      this.showInputError(
+        this.elements.depositAmount,
+        this.elements.depositAmountError,
+        'Deposit amount must be greater than 0'
+      );
+    }
+  }
+
+  /**
+   * Sanitize and validate withdraw amount input
+   */
+  sanitizeWithdrawInput(e) {
+    // First apply decimal sanitization
+    this.sanitizeDecimalInput(e);
+
+    // Clear error first
+    this.clearInputError(this.elements.withdrawAmount, this.elements.withdrawAmountError);
+
+    const value = this.elements.withdrawAmount?.value.trim();
+
+    // Skip validation if field is empty
+    if (!value) {
+      return;
+    }
+
+    // Parse the value
+    const parsedValue = parseNumber(value);
+
+    if (parsedValue !== null && parsedValue <= 0) {
+      this.showInputError(
+        this.elements.withdrawAmount,
+        this.elements.withdrawAmountError,
+        'Withdrawal amount must be greater than 0'
+      );
+    }
   }
 }
 

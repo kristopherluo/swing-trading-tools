@@ -4,6 +4,8 @@
 
 import { state } from './state.js';
 import { showToast } from '../components/ui/ui.js';
+import { priceTracker } from './priceTracker.js';
+import { historicalPrices } from './historicalPrices.js';
 
 // These will be set after modules are initialized to avoid circular dependencies
 let settingsModule = null;
@@ -135,6 +137,15 @@ export const dataManager = {
     localStorage.removeItem('riskCalcJournalMeta');
     localStorage.removeItem('riskCalcCashFlow');
     localStorage.removeItem('historicalPriceCache');
+
+    // Clear API keys from localStorage
+    localStorage.removeItem('finnhubApiKey');
+    localStorage.removeItem('twelveDataApiKey');
+    localStorage.removeItem('alphaVantageApiKey');
+
+    // Clear API keys from service objects
+    priceTracker.setApiKey('');
+    historicalPrices.setApiKey('');
 
     // Reset state
     const savedTheme = state.settings.theme;

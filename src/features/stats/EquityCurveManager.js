@@ -545,14 +545,6 @@ class EquityCurveManager {
         currentPrices
       });
 
-      console.log('[EquityCurve] Using current prices for today:', {
-        balance: result.balance,
-        realizedPnL: result.realizedPnL,
-        unrealizedPnL: result.unrealizedPnL,
-        cashFlow: result.cashFlow,
-        pricesCached: Object.keys(currentPrices).length
-      });
-
       return {
         balance: result.balance,
         realizedBalance: result.realizedBalance,

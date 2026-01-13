@@ -52,6 +52,15 @@
   box-shadow: 0 0 16px rgba(96, 165, 250, 0.4), inset 0 0 12px rgba(96, 165, 250, 0.15);
 }
 
+.btn--primary.active {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.2);
+  border: 1.5px solid rgba(74, 222, 128, 0.7);
+  text-shadow: 0 0 12px rgba(74, 222, 128, 1);
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.5), inset 0 0 16px rgba(74, 222, 128, 0.15);
+  cursor: not-allowed;
+}
+
 .btn--success {
   color: #4ade80;
   background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.25) 0%, rgba(74, 222, 128, 0.08) 100%),

@@ -831,9 +831,6 @@ class TradeWizard {
     let companyData = null;
     if (priceTracker.apiKey && ticker) {
       try {
-        // Show loading toast
-        showToast('🔍 Validating ticker...', 'info');
-
         // Fetch price to validate ticker and company profile in parallel
         const [priceData, profileData] = await Promise.all([
           priceTracker.fetchPrice(ticker),
@@ -844,12 +841,11 @@ class TradeWizard {
       } catch (error) {
         // Only block trade if it's definitely an invalid ticker
         if (error.message.includes('Invalid ticker symbol')) {
-          showToast(`❌ ${error.message}`, 'error');
+          // Silent validation - no toast
           return;
         }
 
-        // For API errors (rate limits, network issues), log trade anyway
-        showToast('⚠️ Could not validate ticker (API limit), logging trade anyway...', 'warning');
+        // For API errors (rate limits, network issues), log trade anyway - silent
       }
     }
 
@@ -888,8 +884,7 @@ class TradeWizard {
     // Save changes
     state.saveJournalMeta();
 
-    // Show success toast
-    this.showSuccessToast();
+    // Success toast removed - silent save
   }
 
   hasThesisData() {
@@ -1113,34 +1108,19 @@ class TradeWizard {
   }
 
   showInputError(inputElement, errorElement, message) {
-    console.log('[DEBUG] showInputError called', { inputElement, errorElement, message });
-
     // Add error class to input
     if (inputElement) {
       inputElement.classList.add('input--error');
-      console.log('[DEBUG] Added input--error class to input');
-    } else {
-      console.log('[DEBUG] WARNING: inputElement is null/undefined');
     }
 
     // Show error message
     if (errorElement) {
       errorElement.textContent = message;
       errorElement.classList.add('input-error--visible');
-      console.log('[DEBUG] Set error text and added input-error--visible class', errorElement);
-    } else {
-      console.log('[DEBUG] WARNING: errorElement is null/undefined');
     }
-
-    // Don't focus - it triggers another input event that clears the error
-    // if (inputElement) {
-    //   inputElement.focus();
-    // }
   }
 
   clearInputError(inputElement, errorElement) {
-    console.log('[DEBUG] clearInputError called', { inputElement, errorElement });
-    console.trace('[DEBUG] clearInputError stack trace');
 
     // Remove error class from input
     if (inputElement) {
@@ -1270,8 +1250,6 @@ class TradeWizard {
   }
 
   sanitizeEntryPriceInput(e) {
-    console.log('[DEBUG] sanitizeEntryPriceInput called', e.target.value);
-
     // Use generic decimal sanitizer
     this.sanitizeDecimalInput(e);
 
@@ -1280,20 +1258,17 @@ class TradeWizard {
 
     // Validate entry price if value is provided
     const value = this.elements.wizardEntryPrice?.value.trim();
-    console.log('[DEBUG] Entry price value after sanitize:', value);
 
     if (value) {
       const entryPrice = parseFloat(value);
-      console.log('[DEBUG] Parsed entry price:', entryPrice, 'Should show error?', entryPrice <= 0);
 
       if (!isNaN(entryPrice) && entryPrice <= 0) {
-        console.log('[DEBUG] Showing error for entry price');
         this.showInputError(
           this.elements.wizardEntryPrice,
           this.elements.wizardEntryPriceError,
           'Entry price must be greater than 0'
         );
-        return; // Don't update state if there's an error
+        return;
       }
     }
 

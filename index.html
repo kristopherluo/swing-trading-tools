@@ -569,12 +569,13 @@
       <div class="settings-section" id="accountDefaultsSection">
         <h3 class="settings-section__title">Account Details</h3>
 
-        <div class="input-group">
+        <div class="input-group" style="display: flex; flex-direction: column; gap: 0.25rem;">
           <label class="input-label" for="settingsAccountSize">Starting Account Balance</label>
           <div class="input-wrapper input-wrapper--prefix">
             <span class="input-prefix">$</span>
             <input type="text" class="input input--mono" id="settingsAccountSize" value="10,000">
           </div>
+          <div class="input-error" id="settingsAccountSizeError"></div>
         </div>
 
         <div class="account-summary" id="accountSummary">
@@ -622,7 +623,7 @@
         </div>
 
         <div class="cash-flow-actions">
-          <div class="input-group">
+          <div class="input-group" style="display: flex; flex-direction: column; gap: 0.25rem;">
             <label class="input-label" for="depositAmount">Deposit</label>
             <div class="input-with-btn input-with-btn--extended">
               <input type="text" class="input input--date" id="depositDate" placeholder="Select date">
@@ -638,9 +639,10 @@
                 Confirm
               </button>
             </div>
+            <div class="input-error" id="depositAmountError"></div>
           </div>
 
-          <div class="input-group">
+          <div class="input-group" style="display: flex; flex-direction: column; gap: 0.25rem;">
             <label class="input-label" for="withdrawAmount">Withdraw</label>
             <div class="input-with-btn input-with-btn--extended">
               <input type="text" class="input input--date" id="withdrawDate" placeholder="Select date">
@@ -655,6 +657,7 @@
                 Confirm
               </button>
             </div>
+            <div class="input-error" id="withdrawAmountError"></div>
           </div>
         </div>
 

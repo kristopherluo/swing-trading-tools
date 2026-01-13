@@ -64,7 +64,7 @@ class PositionsView {
       if (data.to === 'positions') {
         this.hasAnimated = false; // Reset animation flag when entering view
         this.render();
-        this.startAutoRefresh();
+        this.startAutoRefresh(true); // Pass true to skip immediate refresh
       } else {
         this.stopAutoRefresh();
       }
@@ -680,12 +680,12 @@ class PositionsView {
     }
   }
 
-  startAutoRefresh() {
+  startAutoRefresh(skipImmediate = false) {
     // Clear any existing interval
     this.stopAutoRefresh();
 
-    // Refresh immediately on start
-    if (priceTracker.apiKey) {
+    // Refresh immediately on start (unless skipped for animation purposes)
+    if (!skipImmediate && priceTracker.apiKey) {
       this.refreshPrices(true);
     }
 

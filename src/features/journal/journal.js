@@ -352,10 +352,8 @@ class Journal {
   deleteTrade(id) {
     if (!confirm('Delete this trade?')) return;
 
-    const deleted = state.deleteJournalEntry(id);
-    if (deleted) {
-      showToast('🗑️ Trade deleted', 'success');
-    }
+    state.deleteJournalEntry(id);
+    // Toast removed - silent delete
   }
 
   render() {

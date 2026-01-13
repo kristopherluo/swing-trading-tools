@@ -568,6 +568,21 @@
 .position-card--animate:nth-child(13) { animation-delay: 960ms; }
 .position-card--animate:nth-child(14) { animation-delay: 1040ms; }
 .position-card--animate:nth-child(15) { animation-delay: 1120ms; }
+.position-card--animate:nth-child(16) { animation-delay: 1200ms; }
+.position-card--animate:nth-child(17) { animation-delay: 1280ms; }
+.position-card--animate:nth-child(18) { animation-delay: 1360ms; }
+.position-card--animate:nth-child(19) { animation-delay: 1440ms; }
+.position-card--animate:nth-child(20) { animation-delay: 1520ms; }
+.position-card--animate:nth-child(21) { animation-delay: 1600ms; }
+.position-card--animate:nth-child(22) { animation-delay: 1680ms; }
+.position-card--animate:nth-child(23) { animation-delay: 1760ms; }
+.position-card--animate:nth-child(24) { animation-delay: 1840ms; }
+.position-card--animate:nth-child(25) { animation-delay: 1920ms; }
+.position-card--animate:nth-child(26) { animation-delay: 2000ms; }
+.position-card--animate:nth-child(27) { animation-delay: 2080ms; }
+.position-card--animate:nth-child(28) { animation-delay: 2160ms; }
+.position-card--animate:nth-child(29) { animation-delay: 2240ms; }
+.position-card--animate:nth-child(30) { animation-delay: 2320ms; }
 
 .position-card--trimmed {
   background:

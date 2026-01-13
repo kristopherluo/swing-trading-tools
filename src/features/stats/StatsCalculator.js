@@ -28,15 +28,6 @@ export class StatsCalculator {
       currentPrices
     });
 
-    console.log('[Stats CurrentAccount]', {
-      starting: state.settings.startingAccountSize,
-      realizedPnL: result.realizedPnL,
-      unrealizedPnL: result.unrealizedPnL,
-      cashFlow: result.cashFlow,
-      balance: result.balance,
-      pricesCached: Object.keys(currentPrices).length
-    });
-
     return result.balance;
   }
 
