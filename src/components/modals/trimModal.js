@@ -3,7 +3,8 @@
  */
 
 import { state } from '../../core/state.js';
-import { formatCurrency, formatNumber, disableWeekendsOnDateInput, getCurrentWeekday } from '../../core/utils.js';
+import { formatCurrency, formatNumber, initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
+import { formatDate } from '../../utils/marketHours.js';
 import { showToast } from '../ui/ui.js';
 
 class TrimModal {
@@ -23,8 +24,8 @@ class TrimModal {
 
   disableWeekends() {
     // Disable weekends on date inputs
-    disableWeekendsOnDateInput(this.elements.dateInput);
-    disableWeekendsOnDateInput(this.elements.entryDateInput);
+    initFlatpickr(this.elements.dateInput);
+    initFlatpickr(this.elements.entryDateInput);
   }
 
   cacheElements() {
@@ -144,10 +145,7 @@ class TrimModal {
   setDefaultDate() {
     if (this.elements.dateInput) {
       const today = getCurrentWeekday();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      const dateString = `${year}-${month}-${day}`;
+      const dateString = formatDate(today);
 
       this.elements.dateInput.value = dateString;
 

@@ -4,6 +4,8 @@
 
 import { state } from '../../core/state.js';
 import { formatCurrency, formatPercent, formatDate, initFlatpickr, getCurrentWeekday } from '../../core/utils.js';
+import { formatDate as formatDateYMD } from '../../utils/marketHours.js';
+import { getTradeRealizedPnL } from '../../core/utils/tradeCalculations.js';
 import { trimModal } from '../../components/modals/trimModal.js';
 import { viewManager } from '../../components/ui/viewManager.js';
 import { dataManager } from '../../core/dataManager.js';
@@ -120,13 +122,6 @@ class JournalView {
     this.dateToPicker = initFlatpickr(this.elements.dateTo, options);
   }
 
-  formatDate(date) {
-    // Format date as YYYY-MM-DD
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   cacheElements() {
     this.elements = {
@@ -440,13 +435,6 @@ class JournalView {
     this.render();
   }
 
-  formatDateLocal(date) {
-    // Format date as YYYY-MM-DD in local timezone
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   getFilteredTrades() {
     let filtered = state.journal.entries;
@@ -464,13 +452,13 @@ class JournalView {
         break;
       case 'winners':
         filtered = filtered.filter(t => {
-          const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
+          const pnl = getTradeRealizedPnL(t);
           return (t.status === 'closed' || t.status === 'trimmed') && pnl > 0;
         });
         break;
       case 'losers':
         filtered = filtered.filter(t => {
-          const pnl = t.totalRealizedPnL ?? t.pnl ?? 0;
+          const pnl = getTradeRealizedPnL(t);
           return (t.status === 'closed' || t.status === 'trimmed') && pnl < 0;
         });
         break;
@@ -620,7 +608,7 @@ class JournalView {
 
     // Total P&L
     const totalPnL = closedTrades.reduce((sum, t) => {
-      return sum + (t.totalRealizedPnL ?? t.pnl ?? 0);
+      return sum + (getTradeRealizedPnL(t));
     }, 0);
 
     if (this.elements.totalPnL) {
@@ -630,8 +618,8 @@ class JournalView {
     }
 
     // Wins and losses
-    const winningTrades = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) > 0);
-    const losingTrades = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) < 0);
+    const winningTrades = closedTrades.filter(t => (getTradeRealizedPnL(t)) > 0);
+    const losingTrades = closedTrades.filter(t => (getTradeRealizedPnL(t)) < 0);
     const wins = winningTrades.length;
     const losses = losingTrades.length;
     const total = wins + losses;
@@ -655,7 +643,7 @@ class JournalView {
     // Average win
     if (this.elements.avgWin) {
       if (wins > 0) {
-        const totalWinPnL = winningTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+        const totalWinPnL = winningTrades.reduce((sum, t) => sum + (getTradeRealizedPnL(t)), 0);
         const avgWin = totalWinPnL / wins;
         this.elements.avgWin.textContent = `+${formatCurrency(avgWin)}`;
         this.elements.avgWin.className = 'journal-summary-bar__value journal-summary-bar__value--positive';
@@ -668,7 +656,7 @@ class JournalView {
     // Average loss
     if (this.elements.avgLoss) {
       if (losses > 0) {
-        const totalLossPnL = losingTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+        const totalLossPnL = losingTrades.reduce((sum, t) => sum + (getTradeRealizedPnL(t)), 0);
         const avgLoss = totalLossPnL / losses;
         this.elements.avgLoss.textContent = formatCurrency(avgLoss);
         this.elements.avgLoss.className = 'journal-summary-bar__value journal-summary-bar__value--negative';
@@ -695,7 +683,7 @@ class JournalView {
     this.hasAnimated = true;
 
     this.elements.tableBody.innerHTML = trades.map((trade, index) => {
-      const pnl = trade.totalRealizedPnL ?? trade.pnl ?? 0;
+      const pnl = getTradeRealizedPnL(trade);
       const hasPnL = trade.status === 'closed' || trade.status === 'trimmed';
       const shares = trade.remainingShares ?? trade.shares;
       const sharesDisplay = trade.originalShares
@@ -743,7 +731,7 @@ class JournalView {
       // Determine row background class for closed trades
       let rowBgClass = '';
       if (trade.status === 'closed') {
-        const tradePnL = trade.totalRealizedPnL ?? trade.pnl ?? 0;
+        const tradePnL = getTradeRealizedPnL(trade);
         if (tradePnL > 0) {
           rowBgClass = 'journal-row--closed-winner';
         } else if (tradePnL < 0) {

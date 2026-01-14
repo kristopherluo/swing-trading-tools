@@ -388,8 +388,13 @@ class PositionsView {
     const totalRisk = sharedMetrics.getOpenRisk();
 
     // Calculate total unrealized P&L
-    const pnlData = priceTracker.calculateTotalUnrealizedPnL(activeTrades);
-    const totalPnL = pnlData.totalPnL;
+    let totalPnL = 0;
+    for (const trade of activeTrades) {
+      const pnl = priceTracker.calculateUnrealizedPnL(trade);
+      if (pnl) {
+        totalPnL += pnl.unrealizedPnL;
+      }
+    }
 
     const riskPercent = (totalRisk / state.account.currentSize) * 100;
 

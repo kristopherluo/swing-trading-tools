@@ -901,7 +901,7 @@
 }
 
 .journal-empty__title {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: var(--font-semibold);
   color: var(--text-primary);

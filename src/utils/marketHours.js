@@ -211,6 +211,42 @@ export function isBusinessDay(dateStr) {
 }
 
 /**
+ * Adjust a Date object to the previous weekday if it falls on a weekend
+ * Modifies the date in-place
+ * @param {Date} date - Date object to adjust
+ * @returns {Date} The adjusted date (same object)
+ */
+export function adjustToPreviousWeekday(date) {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0) {
+    // Sunday: go back to Friday
+    date.setDate(date.getDate() - 2);
+  } else if (dayOfWeek === 6) {
+    // Saturday: go back to Friday
+    date.setDate(date.getDate() - 1);
+  }
+  return date;
+}
+
+/**
+ * Adjust a Date object to the next weekday if it falls on a weekend
+ * Modifies the date in-place
+ * @param {Date} date - Date object to adjust
+ * @returns {Date} The adjusted date (same object)
+ */
+export function adjustToNextWeekday(date) {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 6) {
+    // Saturday: go forward to Monday
+    date.setDate(date.getDate() + 2);
+  } else if (dayOfWeek === 0) {
+    // Sunday: go forward to Monday
+    date.setDate(date.getDate() + 1);
+  }
+  return date;
+}
+
+/**
  * Format Date object to 'YYYY-MM-DD' string
  * Uses UTC methods to avoid timezone issues
  * @param {Date} date - Date object

@@ -26,9 +26,6 @@ class App {
   init() {
     console.log('Initializing TradeDeck...');
 
-    // Set up module references for dataManager to avoid circular dependencies
-    dataManager.setModules(settings, calculator, journal, clearDataModal);
-
     // Initialize settings FIRST (loads saved data before theme.init saves defaults)
     settings.init();
 
@@ -88,6 +85,9 @@ class App {
     // Initialize positions and journal views
     positionsView.init();
     journalView.init();
+
+    // Set up module references for dataManager (after all modules are initialized)
+    dataManager.setModules(settings, calculator, journal, clearDataModal, stats, equityChart, positionsView, journalView);
 
     // Initialize keyboard shortcuts
     keyboard.init();

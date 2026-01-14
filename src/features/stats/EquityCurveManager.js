@@ -9,6 +9,7 @@
  */
 
 import { state } from '../../core/state.js';
+import { sleep } from '../../core/utils.js';
 import { historicalPricesBatcher } from './HistoricalPricesBatcher.js';
 import eodCacheManager from '../../core/eodCacheManager.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
@@ -132,7 +133,7 @@ class EquityCurveManager {
 
       // Throttle to respect rate limits (2 seconds between chunks)
       if (i < chunks.length - 1) {
-        await this._sleep(2000);
+        await sleep(2000);
       }
     }
 
@@ -215,14 +216,6 @@ class EquityCurveManager {
     }
   }
 
-  /**
-   * Legacy method for compatibility
-   */
-  invalidateCache() {
-    console.log('[EquityCurve] Full cache invalidation requested');
-    eodCacheManager.clearAllData();
-    this.equityCurve = null;
-  }
 
   /**
    * Invalidate from a specific date forward
@@ -248,12 +241,6 @@ class EquityCurveManager {
     return curve[dateStr]?.balance || null;
   }
 
-  /**
-   * Legacy method name for compatibility
-   */
-  getEODBalance(dateStr) {
-    return this.getBalanceOnDate(dateStr);
-  }
 
   // =============================================================================
   // PRIVATE METHODS
@@ -271,6 +258,15 @@ class EquityCurveManager {
     for (const dateStr of businessDays) {
       // Special handling for today: use current prices instead of cached EOD
       if (dateStr === todayStr) {
+        // FIX: Check if we have prices before building today's point
+        // Skip today if cache is empty (prevents showing artificial cliff drop with $0 unrealized P&L)
+        const activeTrades = state.journal.entries.filter(t => t.status === 'open' || t.status === 'trimmed');
+
+        if (activeTrades.length > 0 && priceTracker.cache.size === 0) {
+          console.warn('[EquityCurve] Skipping today\'s point - price cache empty for active trades');
+          continue; // Skip today, use yesterday's point as latest
+        }
+
         const currentBalance = this._calculateCurrentBalance();
 
         if (currentBalance !== null) {
@@ -378,10 +374,16 @@ class EquityCurveManager {
 
     // Get EOD prices for each ticker
     const stockPrices = {};
+    const missingTickers = [];
+
     for (const ticker of openTickers) {
       const price = await historicalPricesBatcher.getPriceOnDate(ticker, dateStr);
       if (price) {
         stockPrices[ticker] = price;
+      } else {
+        // FIX: Track missing tickers to mark snapshot as incomplete
+        missingTickers.push(ticker);
+        console.warn(`[EquityCurve] Missing price for ${ticker} on ${dateStr}`);
       }
     }
 
@@ -399,6 +401,9 @@ class EquityCurveManager {
       dateStr
     );
 
+    // FIX: Mark as incomplete if any ticker prices are missing
+    const incomplete = missingTickers.length > 0;
+
     return {
       balance: balanceData.balance,
       realizedBalance: balanceData.realizedBalance,
@@ -406,7 +411,9 @@ class EquityCurveManager {
       stockPrices,
       positionsOwned: openTickers,
       cashFlow: dayCashFlow,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      incomplete,
+      missingTickers
     };
   }
 
@@ -516,13 +523,6 @@ class EquityCurveManager {
   }
 
   /**
-   * Sleep utility
-   */
-  _sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
    * Get entry date string from trade timestamp
    * Converts timestamp to 'YYYY-MM-DD' format
    */
@@ -545,9 +545,8 @@ class EquityCurveManager {
    */
   _calculateCurrentBalance() {
     try {
-      // Get current prices from priceTracker (convert Map to object)
-      const priceMap = priceTracker.cache || new Map();
-      const currentPrices = Object.fromEntries(priceMap);
+      // Get current prices from priceTracker
+      const currentPrices = priceTracker.getPricesAsObject();
 
       // Use shared account balance calculator with current prices
       const result = accountBalanceCalculator.calculateCurrentBalance({

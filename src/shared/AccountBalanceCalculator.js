@@ -14,6 +14,8 @@
 
 import { state } from '../core/state.js';
 import eodCacheManager from '../core/eodCacheManager.js';
+import { calculateRealizedPnL, getTradeRealizedPnL } from '../core/utils/tradeCalculations.js';
+import { formatDate } from '../utils/marketHours.js';
 
 class AccountBalanceCalculator {
   /**
@@ -77,7 +79,8 @@ class AccountBalanceCalculator {
     const tradesClosedByDate = this._getTradesClosedByDate(allTrades, dateStr);
 
     // Calculate realized P&L (trades closed on or before this date)
-    const realizedPnL = tradesClosedByDate.reduce((sum, t) => sum + (t.pnl || 0), 0);
+    // Include totalRealizedPnL for trimmed trades, fallback to pnl for closed trades
+    const realizedPnL = tradesClosedByDate.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
 
     // Calculate cash flow up to this date
     const cashFlow = this._calculateCashFlowUpToDate(cashFlowTransactions, dateStr);
@@ -158,16 +161,7 @@ class AccountBalanceCalculator {
    * @private
    */
   _calculateRealizedPnL(allTrades) {
-    return allTrades.reduce((sum, t) => {
-      if (t.status === 'closed') {
-        // Fully closed trade
-        return sum + (t.pnl || 0);
-      } else if (t.status === 'trimmed') {
-        // Trimmed trade - use totalRealizedPnL which includes all trim profits
-        return sum + (t.totalRealizedPnL || 0);
-      }
-      return sum;
-    }, 0);
+    return calculateRealizedPnL(allTrades);
   }
 
   /**
@@ -229,7 +223,10 @@ class AccountBalanceCalculator {
    */
   _calculateCashFlowUpToDate(transactions, dateStr) {
     return transactions
-      .filter(txn => txn.date <= dateStr)
+      .filter(txn => {
+        const txnDateStr = this._getTransactionDateString(txn);
+        return txnDateStr && txnDateStr <= dateStr;
+      })
       .reduce((sum, txn) => {
         return sum + (txn.type === 'deposit' ? txn.amount : -txn.amount);
       }, 0);
@@ -359,7 +356,7 @@ class AccountBalanceCalculator {
 
   /**
    * Get entry date string from trade timestamp
-   * Converts timestamp to 'YYYY-MM-DD' format
+   * Converts timestamp to 'YYYY-MM-DD' format using UTC
    * @param {Object} trade - Trade object
    * @returns {string} Date string in 'YYYY-MM-DD' format
    * @private
@@ -372,12 +369,26 @@ class AccountBalanceCalculator {
       return trade.timestamp.substring(0, 10);
     }
 
-    // Otherwise convert to Date and format
-    const date = new Date(trade.timestamp);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    // Use centralized date formatting
+    return formatDate(new Date(trade.timestamp));
+  }
+
+  /**
+   * Extract date string from transaction timestamp
+   * @param {Object} transaction - Transaction object with timestamp
+   * @returns {string|null} Date string in 'YYYY-MM-DD' format
+   * @private
+   */
+  _getTransactionDateString(transaction) {
+    if (!transaction.timestamp) return null;
+
+    // If timestamp is already a string in YYYY-MM-DD format, return it
+    if (typeof transaction.timestamp === 'string' && transaction.timestamp.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return transaction.timestamp.substring(0, 10);
+    }
+
+    // Use centralized date formatting
+    return formatDate(new Date(transaction.timestamp));
   }
 }
 

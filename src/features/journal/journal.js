@@ -4,6 +4,7 @@
 
 import { state } from '../../core/state.js';
 import { formatCurrency, formatPercent, formatDate, createTimestampFromDateInput } from '../../core/utils.js';
+import { getTradeRealizedPnL } from '../../core/utils/tradeCalculations.js';
 import { showToast } from '../../components/ui/ui.js';
 import { trimModal } from '../../components/modals/trimModal.js';
 import { dataManager } from '../../core/dataManager.js';
@@ -142,8 +143,6 @@ class Journal {
 
       // Export buttons (journal panel)
       exportCSVBtn: document.getElementById('exportCSVBtn'),
-      exportTSVBtn: document.getElementById('exportTSVBtn'),
-      exportPDFBtn: document.getElementById('exportPDFBtn'),
 
       // Export buttons (journal modal)
       journalCopyCSV: document.getElementById('journalCopyCSV'),
@@ -187,14 +186,6 @@ class Journal {
     // Export buttons (journal panel)
     if (this.elements.exportCSVBtn) {
       this.elements.exportCSVBtn.addEventListener('click', () => dataManager.exportCSV());
-    }
-    if (this.elements.exportTSVBtn) {
-      this.elements.exportTSVBtn.addEventListener('click', () => dataManager.exportTSV());
-    }
-    if (this.elements.exportPDFBtn) {
-      this.elements.exportPDFBtn.addEventListener('click', () => {
-        showToast('📄 PDF export coming soon. Use CSV for now.', 'warning');
-      });
     }
 
     // Export buttons (journal modal)
@@ -518,8 +509,8 @@ class Journal {
       const isClosed = trade.status === 'closed';
 
       // Use totalRealizedPnL for trimmed/closed trades, fallback to pnl for legacy
-      const pnlValue = trade.totalRealizedPnL ?? trade.pnl;
-      const pnlDisplay = pnlValue !== null && pnlValue !== undefined
+      const pnlValue = getTradeRealizedPnL(trade);
+      const pnlDisplay = pnlValue !== 0
         ? `<span class="${pnlValue >= 0 ? 'text-success' : 'text-danger'}">${pnlValue >= 0 ? '+' : ''}${formatCurrency(pnlValue)}</span>`
         : '—';
 
@@ -546,12 +537,11 @@ class Journal {
     }).join('');
 
     // Summary - use totalRealizedPnL for accurate counting
-    const getPnL = (t) => t.totalRealizedPnL ?? t.pnl ?? 0;
-    const wins = trades.filter(t => getPnL(t) > 0).length;
-    const losses = trades.filter(t => getPnL(t) < 0).length;
+    const wins = trades.filter(t => getTradeRealizedPnL(t) > 0).length;
+    const losses = trades.filter(t => getTradeRealizedPnL(t) < 0).length;
     const open = trades.filter(t => t.status === 'open').length;
     const trimmed = trades.filter(t => t.status === 'trimmed').length;
-    const totalPnL = trades.reduce((sum, t) => sum + getPnL(t), 0);
+    const totalPnL = trades.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
 
     if (this.elements.journalSummaryText) {
       const activeCount = open + trimmed;

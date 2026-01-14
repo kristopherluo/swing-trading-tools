@@ -64,7 +64,9 @@ export class DateRangeFilter {
       }
     }
 
-    return false;
+    // No trades: Max preset is "today to today"
+    // This is the default state when journal is empty
+    return this.filters.dateFrom === todayStr;
   }
 
   /**
@@ -116,13 +118,7 @@ export class DateRangeFilter {
       // Check YTD preset
       if (!matchedPreset) {
         const jan1 = new Date(today.getFullYear(), 0, 1);
-        // Adjust jan1 to next weekday if it's a weekend
-        const jan1DayOfWeek = jan1.getDay();
-        if (jan1DayOfWeek === 0) {
-          jan1.setDate(jan1.getDate() + 1);
-        } else if (jan1DayOfWeek === 6) {
-          jan1.setDate(jan1.getDate() + 2);
-        }
+        marketHours.adjustToNextWeekday(jan1);
 
         const jan1Str = this.formatDate(jan1);
         if (this.filters.dateFrom === jan1Str && this.filters.dateTo === todayStr) {
@@ -137,9 +133,7 @@ export class DateRangeFilter {
           if (range !== 'all' && range !== 'max' && range !== 'ytd' && !isNaN(parseInt(range))) {
             const fromDate = new Date(today);
             fromDate.setDate(today.getDate() - parseInt(range));
-            const fromDayOfWeek = fromDate.getDay();
-            if (fromDayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (fromDayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
+            marketHours.adjustToPreviousWeekday(fromDate);
 
             const expectedFrom = this.formatDate(fromDate);
 
@@ -185,10 +179,7 @@ export class DateRangeFilter {
 
         if (datesWithTrades.length > 0) {
           earliestDate = new Date(Math.min(...datesWithTrades));
-          // Adjust to previous weekday if weekend
-          const dayOfWeek = earliestDate.getDay();
-          if (dayOfWeek === 0) earliestDate.setDate(earliestDate.getDate() - 2);
-          else if (dayOfWeek === 6) earliestDate.setDate(earliestDate.getDate() - 1);
+          marketHours.adjustToPreviousWeekday(earliestDate);
         }
       }
 
@@ -200,14 +191,7 @@ export class DateRangeFilter {
       // Year to date - from Jan 1 of current year to today (adjusted to weekday)
       const today = getCurrentWeekday();
       const fromDate = new Date(today.getFullYear(), 0, 1);
-
-      // Adjust fromDate to next weekday if it's a weekend
-      const fromDayOfWeek = fromDate.getDay();
-      if (fromDayOfWeek === 0) {
-        fromDate.setDate(fromDate.getDate() + 1);
-      } else if (fromDayOfWeek === 6) {
-        fromDate.setDate(fromDate.getDate() + 2);
-      }
+      marketHours.adjustToNextWeekday(fromDate);
 
       // Don't go back before earliest trade
       const allTrades = state.journal.entries;
@@ -220,10 +204,7 @@ export class DateRangeFilter {
           const earliestDate = new Date(Math.min(...datesWithTrades));
           if (fromDate < earliestDate) {
             fromDate.setTime(earliestDate.getTime());
-            // Adjust to previous weekday if weekend
-            const dayOfWeek = fromDate.getDay();
-            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
+            marketHours.adjustToPreviousWeekday(fromDate);
           }
         }
       }
@@ -237,14 +218,7 @@ export class DateRangeFilter {
       const today = getCurrentWeekday();
       const fromDate = new Date(today);
       fromDate.setDate(today.getDate() - parseInt(range));
-
-      // Adjust fromDate to previous weekday if it's a weekend
-      const fromDayOfWeek = fromDate.getDay();
-      if (fromDayOfWeek === 0) {
-        fromDate.setDate(fromDate.getDate() - 2);
-      } else if (fromDayOfWeek === 6) {
-        fromDate.setDate(fromDate.getDate() - 1);
-      }
+      marketHours.adjustToPreviousWeekday(fromDate);
 
       // Don't go back before earliest trade
       const allTrades = state.journal.entries;
@@ -257,10 +231,7 @@ export class DateRangeFilter {
           const earliestDate = new Date(Math.min(...datesWithTrades));
           if (fromDate < earliestDate) {
             fromDate.setTime(earliestDate.getTime());
-            // Adjust to previous weekday if weekend
-            const dayOfWeek = fromDate.getDay();
-            if (dayOfWeek === 0) fromDate.setDate(fromDate.getDate() - 2);
-            else if (dayOfWeek === 6) fromDate.setDate(fromDate.getDate() - 1);
+            marketHours.adjustToPreviousWeekday(fromDate);
           }
         }
       }

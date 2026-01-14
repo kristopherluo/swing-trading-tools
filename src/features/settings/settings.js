@@ -398,9 +398,6 @@ class Settings {
     state.loadJournalMeta();
     state.loadCashFlow();
 
-    // Migrate existing journal entries to new schema
-    state.migrateJournalEntries();
-
     // Apply theme
     const theme = state.settings.theme || 'dark';
     document.documentElement.dataset.theme = theme;
@@ -486,17 +483,21 @@ class Settings {
 
   updateSummary(cachedUnrealizedPnL = null) {
     const starting = state.settings.startingAccountSize;
-    const realizedPnL = state.account.realizedPnL;
+    const realizedPnL = state.account.realizedPnL; // Use computed property
     const cashFlow = state.getCashFlowNet();
 
-    // Use cached unrealized P&L if provided, otherwise calculate
+    // Calculate unrealized P&L
     let unrealizedPnL = 0;
     if (cachedUnrealizedPnL !== null) {
       unrealizedPnL = cachedUnrealizedPnL;
     } else {
-      const allOpenTrades = state.journal.entries.filter(e => e.status === 'open' || e.status === 'trimmed');
-      const unrealizedPnLData = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
-      unrealizedPnL = unrealizedPnLData?.totalPnL || 0;
+      const activeTrades = (state.journal?.entries || []).filter(e => e.status === 'open' || e.status === 'trimmed');
+      for (const trade of activeTrades) {
+        const pnl = priceTracker.calculateUnrealizedPnL(trade);
+        if (pnl) {
+          unrealizedPnL += pnl.unrealizedPnL;
+        }
+      }
     }
 
     const current = starting + realizedPnL + unrealizedPnL + cashFlow;
@@ -529,17 +530,21 @@ class Settings {
   }
 
   updateAccountDisplay(size) {
-    // Calculate total account from components to avoid double-counting
+    // Use computed properties from state
     const starting = state.settings.startingAccountSize;
     const realizedPnL = state.account.realizedPnL;
     const cashFlow = state.getCashFlowNet();
 
-    // Get current unrealized P&L from open positions
-    const allOpenTrades = state.journal.entries.filter(e => e.status === 'open' || e.status === 'trimmed');
-    const unrealizedPnLData = priceTracker.calculateTotalUnrealizedPnL(allOpenTrades);
-    const unrealizedPnL = unrealizedPnLData?.totalPnL || 0;
+    // Calculate unrealized P&L
+    let unrealizedPnL = 0;
+    const activeTrades = (state.journal?.entries || []).filter(e => e.status === 'open' || e.status === 'trimmed');
+    for (const trade of activeTrades) {
+      const pnl = priceTracker.calculateUnrealizedPnL(trade);
+      if (pnl) {
+        unrealizedPnL += pnl.unrealizedPnL;
+      }
+    }
 
-    // Calculate total: starting + realized + unrealized + cash flow
     const totalAccount = starting + realizedPnL + unrealizedPnL + cashFlow;
 
     if (this.elements.headerAccountValue) {

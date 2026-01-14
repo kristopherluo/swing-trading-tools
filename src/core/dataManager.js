@@ -6,20 +6,31 @@ import { state } from './state.js';
 import { showToast } from '../components/ui/ui.js';
 import { priceTracker } from './priceTracker.js';
 import { historicalPrices } from './historicalPrices.js';
+import { equityCurveManager } from '../features/stats/EquityCurveManager.js';
+import eodCacheManager from './eodCacheManager.js';
+import { sharedMetrics } from '../shared/SharedMetrics.js';
 
 // These will be set after modules are initialized to avoid circular dependencies
 let settingsModule = null;
 let calculatorModule = null;
 let journalModule = null;
 let clearDataModalModule = null;
+let statsModule = null;
+let equityChartModule = null;
+let positionsViewModule = null;
+let journalViewModule = null;
 
 export const dataManager = {
   // Set module references after initialization
-  setModules(settings, calculator, journal, clearDataModal) {
+  setModules(settings, calculator, journal, clearDataModal, stats, equityChart, positionsView, journalView) {
     settingsModule = settings;
     calculatorModule = calculator;
     journalModule = journal;
     clearDataModalModule = clearDataModal;
+    statsModule = stats;
+    equityChartModule = equityChart;
+    positionsViewModule = positionsView;
+    journalViewModule = journalView;
   },
 
   exportAllData() {
@@ -28,8 +39,8 @@ export const dataManager = {
       exportDate: new Date().toISOString(),
       settings: state.settings,
       journal: state.journal.entries,
-      journalMeta: state.state.journalMeta,
-      cashFlow: state.state.cashFlow,
+      journalMeta: state.journalMeta,
+      cashFlow: state.cashFlow,
       account: {
         realizedPnL: state.account.realizedPnL
       },
@@ -93,12 +104,11 @@ export const dataManager = {
             localStorage.setItem('finnhubApiKey', data.apiKeys.finnhub || '');
             localStorage.setItem('twelveDataApiKey', data.apiKeys.twelveData || '');
             localStorage.setItem('alphaVantageApiKey', data.apiKeys.alphaVantage || '');
-          } else if (data.apiKey) {
-            // Legacy support (version 1)
-            localStorage.setItem('finnhubApiKey', data.apiKey);
-            localStorage.setItem('twelveDataApiKey', '');
-            localStorage.setItem('alphaVantageApiKey', '');
           }
+
+          // FIX: Clear EOD cache after import (imported trades may have different dates)
+          localStorage.removeItem('eodCache');
+          localStorage.removeItem('riskCalcPriceCache');
 
           showToast(`📤 Imported ${data.journal.length} trades - Reloading...`, 'success');
 
@@ -121,7 +131,7 @@ export const dataManager = {
     if (clearDataModalModule) clearDataModalModule.open();
   },
 
-  confirmClearAllData() {
+  async confirmClearAllData() {
     // Clear localStorage
     localStorage.removeItem('riskCalcSettings');
     localStorage.removeItem('riskCalcJournal');
@@ -140,6 +150,12 @@ export const dataManager = {
     // Clear API keys from service objects
     priceTracker.setApiKey('');
     historicalPrices.setApiKey('');
+
+    // Clear price tracker cache
+    priceTracker.cache.clear();
+
+    // Clear EOD cache
+    eodCacheManager.clearAllData();
 
     // Reset state
     const savedTheme = state.settings.theme;
@@ -172,16 +188,36 @@ export const dataManager = {
       schemaVersion: 1
     };
 
+    // Invalidate account cache to force recalculation
+    if (state._invalidateAccountCache) {
+      state._invalidateAccountCache();
+    }
+
     // Save the reset state to localStorage so it persists
     state.saveSettings();
     state.saveJournal();
     state.saveJournalMeta();
     state.saveCashFlow();
 
-    // Refresh UI
-    if (settingsModule) settingsModule.loadAndApply();
+    // Recalculate shared metrics
+    sharedMetrics.recalculateAll();
+
+    // Refresh ALL UI components immediately
+    if (settingsModule) {
+      settingsModule.loadAndApply();
+      settingsModule.updateAccountDisplay(state.account.currentSize);
+    }
     if (calculatorModule) calculatorModule.calculate();
     if (journalModule) journalModule.render();
+    if (journalViewModule) journalViewModule.render();
+    if (positionsViewModule) positionsViewModule.render();
+    if (statsModule) await statsModule.refresh(); // Use refresh() instead of render()
+    if (equityChartModule) equityChartModule.init();
+
+    // Emit state change events to update any other listeners
+    state.emit('accountSizeChanged', state.account.currentSize);
+    state.emit('journalChanged', state.journal.entries);
+    state.emit('cashFlowChanged', state.cashFlow);
 
     if (clearDataModalModule) clearDataModalModule.close();
     showToast('🗑️ All data cleared', 'success');

@@ -74,6 +74,15 @@ export function throttle(fn, limit) {
   };
 }
 
+/**
+ * Sleep for a specified duration
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise} Promise that resolves after the specified time
+ */
+export function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Generate unique ID
 export function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -206,12 +215,6 @@ export function initFlatpickr(dateInput, options = {}) {
   const fp = flatpickr(dateInput, config);
 
   return fp;
-}
-
-// Legacy function - kept for backwards compatibility, now uses flatpickr
-export function disableWeekendsOnDateInput(dateInput) {
-  // This function is deprecated - use initFlatpickr instead
-  return initFlatpickr(dateInput);
 }
 
 // Get previous business day (skip weekends)

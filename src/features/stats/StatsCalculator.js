@@ -6,8 +6,10 @@
 import { state } from '../../core/state.js';
 import { priceTracker } from '../../core/priceTracker.js';
 import { equityCurveManager } from './EquityCurveManager.js';
-import { getPreviousBusinessDay } from '../../core/utils.js';
+import { getPreviousBusinessDay, getCurrentWeekday } from '../../core/utils.js';
+import { formatDate } from '../../utils/marketHours.js';
 import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
+import { calculateRealizedPnL, getTradeRealizedPnL } from '../../core/utils/tradeCalculations.js';
 
 export class StatsCalculator {
   /**
@@ -16,9 +18,8 @@ export class StatsCalculator {
    * NOW USES SHARED CALCULATOR
    */
   calculateCurrentAccount() {
-    // Get current prices from priceTracker (convert Map to object)
-    const priceMap = priceTracker.cache || new Map();
-    const currentPrices = Object.fromEntries(priceMap);
+    // Get current prices from priceTracker
+    const currentPrices = priceTracker.getPricesAsObject();
 
     // Use shared account balance calculator
     const result = accountBalanceCalculator.calculateCurrentBalance({
@@ -35,8 +36,7 @@ export class StatsCalculator {
    * Calculate realized P&L from closed/trimmed trades within date range
    */
   calculateRealizedPnL(trades) {
-    const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
-    return closedTrades.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+    return calculateRealizedPnL(trades);
   }
 
   /**
@@ -48,7 +48,7 @@ export class StatsCalculator {
 
     if (closedTrades.length === 0) return null;
 
-    const wins = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) > 0);
+    const wins = closedTrades.filter(t => getTradeRealizedPnL(t) > 0);
     return (wins.length / closedTrades.length) * 100;
   }
 
@@ -58,8 +58,8 @@ export class StatsCalculator {
   calculateWinsLosses(trades) {
     const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
 
-    const wins = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) > 0);
-    const losses = closedTrades.filter(t => (t.totalRealizedPnL ?? t.pnl ?? 0) < 0);
+    const wins = closedTrades.filter(t => getTradeRealizedPnL(t) > 0);
+    const losses = closedTrades.filter(t => getTradeRealizedPnL(t) < 0);
 
     return {
       wins: wins.length,
@@ -113,7 +113,7 @@ export class StatsCalculator {
       .filter(tx => {
         const txDate = new Date(tx.timestamp);
         txDate.setHours(0, 0, 0, 0);
-        const txDateStr = this._formatDate(txDate);
+        const txDateStr = formatDate(txDate);
 
         // Check if transaction date is within range
         let inRange = true;
@@ -148,13 +148,13 @@ export class StatsCalculator {
         pnl: 0,
         startingBalance: startingAccountSize,
         endingBalance: startingAccountSize,
-        startDateStr: this._formatDate(mostRecentWeekday)
+        startDateStr: formatDate(mostRecentWeekday)
       };
     }
 
     const earliestTradeDate = new Date(Math.min(...allEntryDates.map(d => d.getTime())));
     earliestTradeDate.setHours(0, 0, 0, 0);
-    const earliestTradeDateStr = this._formatDate(earliestTradeDate);
+    const earliestTradeDateStr = formatDate(earliestTradeDate);
 
     // Determine start balance and date
     let startBalance;
@@ -168,10 +168,10 @@ export class StatsCalculator {
       // Starting from after earliest trade - get balance from day before start date
       const startDate = this._parseDate(dateFrom);
       const dayBefore = getPreviousBusinessDay(startDate);
-      const dayBeforeStr = this._formatDate(dayBefore);
+      const dayBeforeStr = formatDate(dayBefore);
 
       // Get balance from equity curve
-      startBalance = equityCurveManager.getEODBalance(dayBeforeStr);
+      startBalance = equityCurveManager.getBalanceOnDate(dayBeforeStr);
 
       // If not in curve yet, fall back to manual calculation
       if (startBalance === null) {
@@ -183,10 +183,10 @@ export class StatsCalculator {
 
     // Determine end balance
     let endBalance;
-    const endDateStr = dateTo || this._formatDate(getCurrentWeekday());
+    const endDateStr = dateTo || formatDate(getCurrentWeekday());
 
     // Get balance from equity curve
-    endBalance = equityCurveManager.getEODBalance(endDateStr);
+    endBalance = equityCurveManager.getBalanceOnDate(endDateStr);
 
     // If not in curve yet, fall back to current account for today
     if (endBalance === null) {
@@ -226,7 +226,7 @@ export class StatsCalculator {
         return closeDate <= targetDate;
       });
 
-    const realizedPnL = closedTradesBeforeDate.reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+    const realizedPnL = closedTradesBeforeDate.reduce((sum, t) => sum + getTradeRealizedPnL(t), 0);
 
     // Get cash flow before or on this date
     const cashFlowBeforeDate = (state.cashFlow?.transactions || [])
@@ -245,31 +245,28 @@ export class StatsCalculator {
       // Must be entered before or on this date
       if (entryDate > targetDate) return false;
 
-      // If closed, must close after this date
+      // If closed, must close after this date (not on or before)
       if (e.status === 'closed' && e.exitDate) {
         const closeDate = new Date(e.exitDate);
         closeDate.setHours(0, 0, 0, 0);
-        if (closeDate <= targetDate) return false;
+        if (closeDate < targetDate) return false;
       }
 
       return e.status === 'open' || e.status === 'trimmed';
     });
 
-    const unrealizedPnL = priceTracker.calculateTotalUnrealizedPnL(openTrades);
+    // Calculate unrealized P&L for open trades (simplified fallback)
+    let unrealizedPnL = 0;
+    for (const trade of openTrades) {
+      const pnl = priceTracker.calculateUnrealizedPnL(trade);
+      if (pnl) {
+        unrealizedPnL += pnl.unrealizedPnL;
+      }
+    }
 
-    return startingBalance + realizedPnL + cashFlowBeforeDate + (unrealizedPnL?.totalPnL || 0);
+    return startingBalance + realizedPnL + cashFlowBeforeDate + unrealizedPnL;
   }
 
-  /**
-   * Format date to YYYY-MM-DD
-   */
-  _formatDate(date) {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   /**
    * Parse YYYY-MM-DD to Date
@@ -278,22 +275,4 @@ export class StatsCalculator {
     const [year, month, day] = dateStr.split('-').map(Number);
     return new Date(year, month - 1, day);
   }
-}
-
-// Import getCurrentWeekday at the top would cause circular dependency,
-// so we define a simple version here
-function getCurrentWeekday() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-
-  // If Saturday (6), go back to Friday
-  if (dayOfWeek === 6) {
-    today.setDate(today.getDate() - 1);
-  }
-  // If Sunday (0), go back to Friday
-  else if (dayOfWeek === 0) {
-    today.setDate(today.getDate() - 2);
-  }
-
-  return today;
 }

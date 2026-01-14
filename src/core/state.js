@@ -3,6 +3,7 @@
  */
 
 import { debounce } from './utils.js';
+import { calculateRealizedPnL, getTradeRealizedPnL } from './utils/tradeCalculations.js';
 
 class AppState {
   constructor() {
@@ -134,7 +135,7 @@ class AppState {
   _hashTrades() {
     return this.state.journal.entries.length +
       this.state.journal.entries.reduce((sum, t) =>
-        sum + t.id + (t.totalRealizedPnL ?? t.pnl ?? 0), 0
+        sum + t.id + getTradeRealizedPnL(t), 0
       );
   }
 
@@ -439,27 +440,6 @@ class AppState {
     this.emit('journalMetaSettingsChanged', this.state.journalMeta.settings);
   }
 
-  // Migration helper for existing journal entries
-  migrateJournalEntries() {
-    let migrated = false;
-    this.state.journal.entries = this.state.journal.entries.map(entry => {
-      if (!entry.hasOwnProperty('thesis')) {
-        migrated = true;
-        return {
-          ...entry,
-          thesis: null,
-          wizardComplete: false,
-          wizardSkipped: []
-        };
-      }
-      return entry;
-    });
-    if (migrated) {
-      this.saveJournal();
-      console.log('Migrated journal entries to new schema');
-    }
-  }
-
   // JournalMeta persistence
   // Public method: uses debouncing to batch saves
   saveJournalMeta() {
@@ -506,10 +486,8 @@ class AppState {
       return this._accountCache.realizedPnL;
     }
 
-    // Recalculate from trades
-    const pnl = this.state.journal.entries
-      .filter(t => (t.status === 'closed' || t.status === 'trimmed'))
-      .reduce((sum, t) => sum + (t.totalRealizedPnL ?? t.pnl ?? 0), 0);
+    // Recalculate from trades using shared utility
+    const pnl = calculateRealizedPnL(this.state.journal.entries);
 
     // Update cache
     this._accountCache.realizedPnL = pnl;

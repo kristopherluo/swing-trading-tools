@@ -5,6 +5,7 @@
 import { state } from '../../core/state.js';
 import { showToast } from '../ui/ui.js';
 import { formatCurrency, formatNumber, formatPercent, formatDate, createTimestampFromDateInput, initFlatpickr, getCurrentWeekday, restrictToNumberInput } from '../../core/utils.js';
+import { formatDate as formatDateYMD } from '../../utils/marketHours.js';
 import { priceTracker } from '../../core/priceTracker.js';
 
 class TradeWizard {
@@ -45,10 +46,7 @@ class TradeWizard {
   disableWeekends() {
     // Initialize trade date with default to current weekday (or last Friday if weekend)
     const today = getCurrentWeekday();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const dateString = `${year}-${month}-${day}`;
+    const dateString = formatDateYMD(today);
 
     initFlatpickr(this.elements.wizardTradeDate, {
       defaultDate: dateString
@@ -360,11 +358,7 @@ class TradeWizard {
     // Set trade date to today using Flatpickr API
     if (this.elements.wizardTradeDate?._flatpickr) {
       const today = getCurrentWeekday();
-      // Format date as YYYY-MM-DD string for flatpickr
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      const dateString = `${year}-${month}-${day}`;
+      const dateString = formatDateYMD(today);
 
       this.elements.wizardTradeDate._flatpickr.setDate(dateString, false);
     }
@@ -812,10 +806,7 @@ class TradeWizard {
     let tradeDate;
     if (this.elements.wizardTradeDate?._flatpickr && this.elements.wizardTradeDate._flatpickr.selectedDates.length > 0) {
       const selectedDate = this.elements.wizardTradeDate._flatpickr.selectedDates[0];
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      tradeDate = `${year}-${month}-${day}`;
+      tradeDate = formatDateYMD(selectedDate);
     } else {
       tradeDate = this.elements.wizardTradeDate?.value || new Date().toISOString().split('T')[0];
     }

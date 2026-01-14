@@ -2,6 +2,9 @@
  * Historical Prices - Fetch and cache historical stock prices for equity curve
  */
 
+import { formatDate } from '../utils/marketHours.js';
+import { sleep } from './utils.js';
+
 class HistoricalPrices {
   constructor() {
     this.cache = {}; // { ticker: { 'YYYY-MM-DD': { open, high, low, close } } }
@@ -20,7 +23,7 @@ class HistoricalPrices {
   async getPrice(ticker, date) {
     if (!ticker || !date) return null;
 
-    const dateStr = this.formatDate(date);
+    const dateStr = formatDate(date);
 
     // Check cache first
     if (this.cache[ticker] && this.cache[ticker][dateStr]) {
@@ -92,7 +95,6 @@ class HistoricalPrices {
    */
   async batchFetchPrices(tickers, onProgress = null) {
     const results = {};
-    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     for (let i = 0; i < tickers.length; i++) {
       const ticker = tickers[i];
@@ -113,7 +115,7 @@ class HistoricalPrices {
       // Add delay between requests to respect rate limits (25 calls/day = ~1 per 3.5s to be safe)
       // Using 2 second delay to be conservative
       if (i < tickers.length - 1) {
-        await delay(2000);
+        await sleep(2000);
       }
     }
 
@@ -147,7 +149,7 @@ class HistoricalPrices {
   getPriceOnDate(ticker, date) {
     if (!this.cache[ticker]) return null;
 
-    const dateStr = this.formatDate(date);
+    const dateStr = formatDate(date);
 
     // Try exact match first
     if (this.cache[ticker][dateStr]) {
@@ -159,7 +161,7 @@ class HistoricalPrices {
     for (let i = 1; i <= 7; i++) {
       const prevDate = new Date(targetDate);
       prevDate.setDate(prevDate.getDate() - i);
-      const prevDateStr = this.formatDate(prevDate);
+      const prevDateStr = formatDate(prevDate);
 
       if (this.cache[ticker][prevDateStr]) {
         return this.cache[ticker][prevDateStr].close;
@@ -182,17 +184,6 @@ class HistoricalPrices {
     return (price - entry) * shares;
   }
 
-  /**
-   * Format date to YYYY-MM-DD string
-   * Uses UTC methods to avoid timezone issues
-   */
-  formatDate(date) {
-    const d = new Date(date);
-    const year = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   /**
    * Load cache from localStorage

@@ -118,7 +118,7 @@ class Stats {
     });
     state.on('accountSizeChanged', () => {
       // Starting balance changed - affects all days
-      equityCurveManager.invalidateCache();
+      eodCacheManager.clearAllData();
       // Only refresh if currently on stats page
       if (state.ui.currentView === 'stats') {
         this.refresh();
@@ -131,10 +131,10 @@ class Stats {
           const dates = cashFlow.transactions.map(tx => new Date(tx.timestamp));
           const earliestDate = new Date(Math.min(...dates.map(d => d.getTime())));
 
-          const dateStr = this.formatDateLocal(earliestDate);
+          const dateStr = marketHours.formatDate(earliestDate);
           equityCurveManager.invalidateFromDate(dateStr);
         } else {
-          equityCurveManager.invalidateCache();
+          eodCacheManager.clearAllData();
         }
         // Only refresh if currently on stats page
         if (state.ui.currentView === 'stats') {
@@ -143,7 +143,7 @@ class Stats {
       } catch (error) {
         console.error('Error in cashFlowChanged handler:', error);
         // Fallback to full invalidation
-        equityCurveManager.invalidateCache();
+        eodCacheManager.clearAllData();
         if (state.ui.currentView === 'stats') {
           this.refresh();
         }
@@ -151,7 +151,7 @@ class Stats {
     });
     state.on('settingsChanged', () => {
       // Settings changed - affects all days (could be starting balance, etc.)
-      equityCurveManager.invalidateCache();
+      eodCacheManager.clearAllData();
       // Only refresh if currently on stats page
       if (state.ui.currentView === 'stats') {
         this.refresh();
@@ -320,7 +320,7 @@ class Stats {
 
     // Validation: dates can't be in the future
     const today = getCurrentWeekday();
-    const todayStr = this.formatDateLocal(today);
+    const todayStr = marketHours.formatDate(today);
     if ((dateFrom && dateFrom > todayStr) || (dateTo && dateTo > todayStr)) {
       showToast('Dates cannot be in the future', 'error');
       return;
@@ -361,6 +361,18 @@ class Stats {
     this.showLoadingState(true);
 
     try {
+      // FIX: Auto-fetch prices if cache is empty (prevents silent $0 unrealized P&L)
+      const activeTrades = state.journal.entries.filter(t => t.status === 'open' || t.status === 'trimmed');
+      if (activeTrades.length > 0 && priceTracker.cache.size === 0) {
+        console.log('[Stats] Price cache empty, fetching current prices...');
+        try {
+          await priceTracker.fetchActivePrices();
+        } catch (error) {
+          console.error('[Stats] Failed to fetch prices:', error);
+          // Continue anyway - will show without unrealized P&L
+        }
+      }
+
       await this.calculate();
       this.render();
       await this.renderEquityCurve();
@@ -398,7 +410,7 @@ class Stats {
       ? cashFlowTransactions.filter(tx => {
           const txDate = new Date(tx.timestamp);
           txDate.setHours(0, 0, 0, 0);
-          const txDateStr = this.formatDateLocal(txDate);
+          const txDateStr = marketHours.formatDate(txDate);
 
           let inRange = true;
           if (filterState.dateFrom) {
@@ -696,12 +708,6 @@ class Stats {
     });
   }
 
-  formatDateLocal(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   formatDateDisplay(dateStr) {
     if (!dateStr) return '';

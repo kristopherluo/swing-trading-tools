@@ -4,10 +4,10 @@
  */
 
 import { state } from './state.js';
+import { sleep } from './utils.js';
 import * as marketHours from '../utils/marketHours.js';
 
 const CACHE_KEY = 'riskCalcPriceCache';
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours (legacy, now uses trading day)
 
 export const priceTracker = {
   apiKey: null,
@@ -36,11 +36,6 @@ export const priceTracker = {
         const currentTradingDay = marketHours.getTradingDay();
         if (tradingDay && tradingDay === currentTradingDay) {
           this.cache = new Map(Object.entries(prices));
-        } else {
-          // Legacy: fall back to calendar day check for old cache format
-          if (this.isSameDay(this.lastFetchDate, new Date())) {
-            this.cache = new Map(Object.entries(prices));
-          }
         }
       }
     } catch (e) {
@@ -60,19 +55,6 @@ export const priceTracker = {
     } catch (e) {
       console.error('Failed to save price cache:', e);
     }
-  },
-
-  isSameDay(date1, date2) {
-    // Legacy method - kept for backwards compatibility
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-  },
-
-  needsRefresh() {
-    // Prices are always "current" for the current trading day
-    // No need to refresh if we're still in the same trading day
-    return false; // Let the auto-refresh interval handle refreshing
   },
 
   async fetchPrice(ticker) {
@@ -270,36 +252,6 @@ export const priceTracker = {
     };
   },
 
-  async fetchCompanySummaryFromTwelveData(ticker, apiKey) {
-    const url = `https://api.twelvedata.com/profile?symbol=${ticker.toUpperCase()}&apikey=${apiKey}`;
-
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch company profile (${response.status})`);
-    }
-
-    const data = await response.json();
-
-    // Check for errors
-    if (data.status === 'error') {
-      throw new Error(data.message || 'Twelve Data API error');
-    }
-
-    if (!data.name) {
-      throw new Error('No company profile data available');
-    }
-
-    // Twelve Data returns: name, sector, industry, description, etc.
-    return {
-      ticker: ticker.toUpperCase(),
-      name: data.name || '',
-      sector: data.sector || '',
-      industry: data.industry || '',
-      summary: data.description || ''
-    };
-  },
-
   async fetchPrices(tickers) {
     if (!this.apiKey) {
       throw new Error('Finnhub API key not configured. Add it in Settings.');
@@ -318,7 +270,7 @@ export const priceTracker = {
         results.success.push(priceData);
 
         // Small delay to be respectful of API (not strictly necessary with 60/min limit)
-        await this.sleep(100);
+        await sleep(100);
       } catch (error) {
         results.failed.push({ ticker, error: error.message });
       }
@@ -367,8 +319,13 @@ export const priceTracker = {
     return this.cache.get(ticker.toUpperCase());
   },
 
-  getCachedPrice(ticker) {
-    return this.getPrice(ticker);
+  /**
+   * Convert price cache Map to plain object
+   * Useful for passing to calculators that expect object format
+   * @returns {Object} Object with ticker → price data mappings
+   */
+  getPricesAsObject() {
+    return Object.fromEntries(this.cache);
   },
 
   calculateUnrealizedPnL(trade) {
@@ -390,35 +347,6 @@ export const priceTracker = {
       entry,
       priceData
     };
-  },
-
-  calculateTotalUnrealizedPnL(activeTrades = null) {
-    // Use provided trades if given, otherwise get all active trades
-    if (!activeTrades) {
-      const trades = state.journal.entries;
-      activeTrades = trades.filter(t => t.status === 'open' || t.status === 'trimmed');
-    }
-
-    let totalPnL = 0;
-    let tradeCount = 0;
-
-    for (const trade of activeTrades) {
-      const pnl = this.calculateUnrealizedPnL(trade);
-      if (pnl) {
-        totalPnL += pnl.unrealizedPnL;
-        tradeCount++;
-      }
-    }
-
-    return {
-      totalPnL,
-      tradeCount,
-      percentOfAccount: (totalPnL / state.account.currentSize) * 100
-    };
-  },
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
   },
 
   setApiKey(key) {

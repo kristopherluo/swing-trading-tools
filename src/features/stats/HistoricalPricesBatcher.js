@@ -3,6 +3,9 @@
  * IMPROVED: Batches up to 8 tickers per API call for ~75% faster fetching
  */
 
+import { formatDate } from '../../utils/marketHours.js';
+import { sleep } from '../../core/utils.js';
+
 class HistoricalPricesBatcher {
   constructor() {
     this.cache = {}; // { ticker: { 'YYYY-MM-DD': { open, high, low, close } } }
@@ -21,7 +24,7 @@ class HistoricalPricesBatcher {
   async getPrice(ticker, date) {
     if (!ticker || !date) return null;
 
-    const dateStr = this.formatDate(date);
+    const dateStr = formatDate(date);
 
     // Check cache first
     if (this.cache[ticker] && this.cache[ticker][dateStr]) {
@@ -181,7 +184,6 @@ class HistoricalPricesBatcher {
    */
   async batchFetchPrices(tickers, onProgress = null) {
     const results = {};
-    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     // Filter out tickers that already have cached data
     const tickersToFetch = [];
@@ -229,7 +231,7 @@ class HistoricalPricesBatcher {
 
       // Add delay between batches (2 seconds to be safe with rate limits)
       if (i < batches.length - 1) {
-        await delay(2000);
+        await sleep(2000);
       }
     }
 
@@ -258,7 +260,7 @@ class HistoricalPricesBatcher {
   getPriceOnDate(ticker, date) {
     if (!this.cache[ticker]) return null;
 
-    const dateStr = this.formatDate(date);
+    const dateStr = formatDate(date);
 
     // Try exact match first
     if (this.cache[ticker][dateStr]) {
@@ -270,7 +272,7 @@ class HistoricalPricesBatcher {
     for (let i = 1; i <= 7; i++) {
       const prevDate = new Date(targetDate);
       prevDate.setDate(prevDate.getDate() - i);
-      const prevDateStr = this.formatDate(prevDate);
+      const prevDateStr = formatDate(prevDate);
 
       if (this.cache[ticker][prevDateStr]) {
         return this.cache[ticker][prevDateStr].close;
@@ -280,17 +282,6 @@ class HistoricalPricesBatcher {
     return null;
   }
 
-  /**
-   * Format date to YYYY-MM-DD string
-   * Uses UTC methods to avoid timezone issues
-   */
-  formatDate(date) {
-    const d = new Date(date);
-    const year = d.getUTCFullYear();
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
 
   /**
    * Load cache from localStorage
