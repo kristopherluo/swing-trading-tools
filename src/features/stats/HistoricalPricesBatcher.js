@@ -47,15 +47,17 @@ class HistoricalPricesBatcher {
 
   /**
    * Fetch historical prices for a single ticker
+   * @param {string} ticker - Ticker symbol
+   * @param {number} outputSize - Number of days to fetch (default 90)
    */
-  async fetchHistoricalPrices(ticker) {
+  async fetchHistoricalPrices(ticker, outputSize = 90) {
     if (!this.apiKey) {
       console.warn('No Twelve Data API key set for historical prices');
       return null;
     }
 
     try {
-      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=500&apikey=${this.apiKey}`;
+      const url = `https://api.twelvedata.com/time_series?symbol=${ticker}&interval=1day&outputsize=${outputSize}&apikey=${this.apiKey}`;
 
       const response = await fetch(url);
       const data = await response.json();
@@ -100,8 +102,10 @@ class HistoricalPricesBatcher {
   /**
    * Fetch historical prices for multiple tickers in a single batch request
    * Twelve Data supports comma-separated symbols
+   * @param {Array<string>} tickers - Tickers to fetch
+   * @param {number} outputSize - Number of days to fetch (default 90)
    */
-  async fetchBatchHistoricalPrices(tickers) {
+  async fetchBatchHistoricalPrices(tickers, outputSize = 90) {
     if (!this.apiKey) {
       console.warn('No Twelve Data API key set for historical prices');
       return null;
@@ -112,7 +116,7 @@ class HistoricalPricesBatcher {
     try {
       // Join tickers with commas (max 8 for free tier)
       const symbols = tickers.slice(0, this.BATCH_SIZE).join(',');
-      const url = `https://api.twelvedata.com/time_series?symbol=${symbols}&interval=1day&outputsize=5000&apikey=${this.apiKey}`;
+      const url = `https://api.twelvedata.com/time_series?symbol=${symbols}&interval=1day&outputsize=${outputSize}&apikey=${this.apiKey}`;
 
       const response = await fetch(url);
       const data = await response.json();
@@ -192,8 +196,12 @@ class HistoricalPricesBatcher {
   /**
    * Batch fetch historical prices for multiple tickers
    * IMPROVED: Groups tickers into batches of 8 for fewer API calls
+   * Uses dynamic outputsize based on oldest trade date to minimize data fetching
+   * @param {Array<string>} tickers - Tickers to fetch
+   * @param {Function} onProgress - Progress callback
+   * @param {Object} tickerDates - Map of ticker -> oldest trade date (YYYY-MM-DD)
    */
-  async batchFetchPrices(tickers, onProgress = null) {
+  async batchFetchPrices(tickers, onProgress = null, tickerDates = null) {
     const results = {};
 
     // Filter out tickers that already have cached data
@@ -217,7 +225,21 @@ class HistoricalPricesBatcher {
       return results;
     }
 
-    console.log(`[Prices] Fetching new data for ${tickersToFetch.length} tickers:`, tickersToFetch.join(', '));
+    // Calculate dynamic outputsize based on oldest trade date
+    let outputSize = 30; // Minimum 30 days
+    if (tickerDates) {
+      const today = new Date();
+      for (const ticker of tickersToFetch) {
+        if (tickerDates[ticker]) {
+          const tradeDate = new Date(tickerDates[ticker]);
+          const daysAgo = Math.ceil((today - tradeDate) / (1000 * 60 * 60 * 24));
+          outputSize = Math.max(outputSize, daysAgo + 10); // +10 day buffer
+        }
+      }
+    }
+    outputSize = Math.min(outputSize, 500); // Cap at 500 days max
+
+    console.log(`[Prices] Fetching new data for ${tickersToFetch.length} tickers (${outputSize} days):`, tickersToFetch.join(', '));
 
     // Group into batches of BATCH_SIZE
     const batches = [];
@@ -237,7 +259,7 @@ class HistoricalPricesBatcher {
         });
       }
 
-      const batchResults = await this.fetchBatchHistoricalPrices(batch);
+      const batchResults = await this.fetchBatchHistoricalPrices(batch, outputSize);
       Object.assign(results, batchResults);
 
       // Add delay between batches (2 seconds to be safe with rate limits)
@@ -259,9 +281,13 @@ class HistoricalPricesBatcher {
     const dates = Object.keys(this.cache[ticker]);
     if (dates.length === 0) return false;
 
-    // Historical prices don't change, so if we have any data cached, use it
-    // We'll fetch additional dates if needed, but won't refetch existing dates
-    return true;
+    // Check if cache has data from within the last 7 days
+    // This ensures we refetch if cache is stale
+    const mostRecentDate = dates.sort().reverse()[0]; // Get latest date
+    const daysSinceUpdate = (new Date() - new Date(mostRecentDate)) / (1000 * 60 * 60 * 24);
+
+    // If most recent cached data is older than 7 days, refetch
+    return daysSinceUpdate <= 7;
   }
 
   /**

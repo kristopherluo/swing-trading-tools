@@ -38,6 +38,7 @@ class TradeWizard {
     // Restrict numeric inputs to numbers and decimals only
     restrictToNumberInput(this.elements.wizardEntryPrice, true);
     restrictToNumberInput(this.elements.wizardStopLoss, true);
+    restrictToNumberInput(this.elements.wizardStrikePrice, true);
     restrictToNumberInput(this.elements.wizardShares, false); // Integer only
     restrictToNumberInput(this.elements.wizardRiskDollar, true);
     restrictToNumberInput(this.elements.wizardTargetPrice, true);
@@ -55,6 +56,15 @@ class TradeWizard {
     // Explicitly set the date to ensure it shows in the visible field
     if (this.elements.wizardTradeDate?._flatpickr) {
       this.elements.wizardTradeDate._flatpickr.setDate(dateString, false);
+    }
+
+    // Initialize expiration date - allow past dates, but disable weekends
+    if (this.elements.wizardExpirationDate) {
+      initFlatpickr(this.elements.wizardExpirationDate, {
+        minDate: null,  // Allow past dates
+        maxDate: null   // Allow future dates
+        // Keep default disable option (weekends disabled)
+      });
     }
   }
 
@@ -141,9 +151,18 @@ class TradeWizard {
       // Step 1 - Trade Details
       wizardTicker: document.getElementById('wizardTicker'),
       wizardTickerStatus: document.getElementById('wizardTickerStatus'),
+      assetTypeToggle: document.getElementById('assetTypeToggle'),
+      assetTypeButtons: document.querySelectorAll('#assetTypeToggle .toggle-switch__option'),
       wizardEntryPrice: document.getElementById('wizardEntryPrice'),
       wizardStopLoss: document.getElementById('wizardStopLoss'),
+      optionsStrikeRow: document.getElementById('optionsStrikeRow'),
+      wizardStrikePrice: document.getElementById('wizardStrikePrice'),
+      optionTypeToggle: document.getElementById('optionTypeToggle'),
+      optionTypeButtons: document.querySelectorAll('#optionTypeToggle .toggle-switch__option'),
+      optionsExpirationRow: document.getElementById('optionsExpirationRow'),
+      wizardExpirationDate: document.getElementById('wizardExpirationDate'),
       wizardShares: document.getElementById('wizardShares'),
+      wizardSharesLabel: document.getElementById('wizardSharesLabel'),
       wizardTargetPrice: document.getElementById('wizardTargetPrice'),
       wizardRMultipleGroup: document.getElementById('wizardRMultipleGroup'),
       wizardRMultipleBtns: document.querySelectorAll('#wizardRMultipleGroup .preset-btn'),
@@ -160,6 +179,8 @@ class TradeWizard {
       wizardTickerError: document.getElementById('wizardTickerError'),
       wizardEntryPriceError: document.getElementById('wizardEntryPriceError'),
       wizardStopLossError: document.getElementById('wizardStopLossError'),
+      wizardStrikePriceError: document.getElementById('wizardStrikePriceError'),
+      wizardExpirationDateError: document.getElementById('wizardExpirationDateError'),
       wizardSharesError: document.getElementById('wizardSharesError'),
       wizardRiskDollarError: document.getElementById('wizardRiskDollarError'),
       wizardTargetPriceError: document.getElementById('wizardTargetPriceError'),
@@ -221,13 +242,165 @@ class TradeWizard {
       }
     });
 
-    // Step 1 buttons - validate all fields before proceeding
-    this.elements.cancel1Btn?.addEventListener('click', () => this.close());
-    this.elements.next1Btn?.addEventListener('click', async () => {
-      if (await this.validateStep1()) {
-        this.goToStep(2);
-      }
+    // Asset type toggle (Shares/Options) - click anywhere to toggle
+    this.elements.assetTypeToggle?.addEventListener('click', () => {
+      // Find currently active button
+      const activeBtn = Array.from(this.elements.assetTypeButtons).find(b => b.classList.contains('active'));
+      const activeIndex = Array.from(this.elements.assetTypeButtons).indexOf(activeBtn);
+
+      // Toggle to the other option
+      const newIndex = activeIndex === 0 ? 1 : 0;
+      const newBtn = this.elements.assetTypeButtons[newIndex];
+
+      // Update active state
+      this.elements.assetTypeButtons.forEach(b => b.classList.remove('active'));
+      newBtn.classList.add('active');
+
+      // Update data-active attribute for sliding animation
+      this.elements.assetTypeToggle.setAttribute('data-active', newIndex);
+
+      // Get selected asset type
+      const assetType = newBtn.dataset.assetType;
+
+      // Animated transition between shares and options
+      this.animateAssetTypeSwitch(assetType);
     });
+
+    // Option type toggle (Call/Put) - click anywhere to toggle
+    this.elements.optionTypeToggle?.addEventListener('click', () => {
+      // Find currently active button
+      const activeBtn = Array.from(this.elements.optionTypeButtons).find(b => b.classList.contains('active'));
+      const activeIndex = Array.from(this.elements.optionTypeButtons).indexOf(activeBtn);
+
+      // Toggle to the other option
+      const newIndex = activeIndex === 0 ? 1 : 0;
+      const newBtn = this.elements.optionTypeButtons[newIndex];
+
+      // Update active state
+      this.elements.optionTypeButtons.forEach(b => b.classList.remove('active'));
+      newBtn.classList.add('active');
+
+      // Update data-active attribute for sliding animation
+      this.elements.optionTypeToggle.setAttribute('data-active', newIndex);
+    });
+  }
+
+  animateAssetTypeSwitch(assetType) {
+    const sharesLabel = this.elements.wizardSharesLabel;
+    const strikeRow = this.elements.optionsStrikeRow;
+    const expirationRow = this.elements.optionsExpirationRow;
+
+    // Clear all fields except ticker and trade date
+    if (this.elements.wizardEntryPrice) this.elements.wizardEntryPrice.value = '';
+    if (this.elements.wizardStopLoss) this.elements.wizardStopLoss.value = '';
+    if (this.elements.wizardStrikePrice) this.elements.wizardStrikePrice.value = '';
+    if (this.elements.wizardExpirationDate) this.elements.wizardExpirationDate.value = '';
+    if (this.elements.wizardShares) this.elements.wizardShares.value = '';
+    if (this.elements.wizardRiskDollar) this.elements.wizardRiskDollar.value = '';
+    if (this.elements.wizardTargetPrice) this.elements.wizardTargetPrice.value = '';
+
+    // Clear all validation errors
+    this.clearAllErrors();
+
+    if (assetType === 'options') {
+      // Switching to Options mode
+
+      // Just change the text immediately
+      sharesLabel.textContent = 'Contracts';
+
+      // Add class for increased spacing in Options mode
+      const sharesInputGroup = sharesLabel.closest('.input-group');
+      if (sharesInputGroup) {
+        sharesInputGroup.classList.add('options-mode');
+      }
+
+      // 4. Show fields with display but hidden state
+      strikeRow.style.display = 'grid';
+      expirationRow.style.display = 'block';
+
+      // Add animation classes
+      strikeRow.classList.add('options-field-animating', 'options-field-hidden');
+      expirationRow.classList.add('options-field-animating', 'options-field-hidden');
+
+      // Force reflow to ensure hidden state is applied
+      void strikeRow.offsetHeight;
+      void expirationRow.offsetHeight;
+
+      // 5. Trigger slide down and fade in animation
+      requestAnimationFrame(() => {
+        strikeRow.classList.remove('options-field-hidden');
+        strikeRow.classList.add('options-field-visible');
+
+        setTimeout(() => {
+          expirationRow.classList.remove('options-field-hidden');
+          expirationRow.classList.add('options-field-visible');
+        }, 50); // Slight stagger
+      });
+
+      // 6. Clean up after animation completes
+      setTimeout(() => {
+        strikeRow.classList.remove('options-field-animating', 'options-field-visible');
+        expirationRow.classList.remove('options-field-animating', 'options-field-visible');
+        strikeRow.style.maxHeight = '';
+        strikeRow.style.overflow = '';
+        expirationRow.style.maxHeight = '';
+        expirationRow.style.overflow = '';
+      }, 550);
+
+    } else {
+      // Switching to Shares mode
+
+      // Change label in the middle of slide animation (225ms into 450ms animation)
+      setTimeout(() => {
+        sharesLabel.textContent = 'Shares';
+
+        // Remove options-mode class for reduced spacing
+        const sharesInputGroup = sharesLabel.closest('.input-group');
+        if (sharesInputGroup) {
+          sharesInputGroup.classList.remove('options-mode');
+        }
+      }, 225);
+
+      // 1. Ensure fields are in visible state and add animation classes
+      strikeRow.classList.add('options-field-animating', 'options-field-visible');
+      expirationRow.classList.add('options-field-animating', 'options-field-visible');
+      strikeRow.classList.remove('options-field-hidden');
+      expirationRow.classList.remove('options-field-hidden');
+
+      // Force reflow
+      void strikeRow.offsetHeight;
+      void expirationRow.offsetHeight;
+
+      // 2. Start slide up and fade out animation
+      requestAnimationFrame(() => {
+        strikeRow.classList.remove('options-field-visible');
+        strikeRow.classList.add('options-field-hidden');
+
+        setTimeout(() => {
+          expirationRow.classList.remove('options-field-visible');
+          expirationRow.classList.add('options-field-hidden');
+        }, 50); // Slight stagger
+      });
+
+      // 3. Wait for animation to complete (450ms + buffer)
+      setTimeout(() => {
+        // Both animations finished, now hide and clean up
+        strikeRow.style.display = 'none';
+        expirationRow.style.display = 'none';
+
+        // Clean up
+        strikeRow.classList.remove('options-field-animating', 'options-field-hidden', 'options-field-visible');
+        expirationRow.classList.remove('options-field-animating', 'options-field-hidden', 'options-field-visible');
+        strikeRow.style.maxHeight = '';
+        strikeRow.style.overflow = '';
+        expirationRow.style.maxHeight = '';
+        expirationRow.style.overflow = '';
+      }, 520); // 450ms animation + 70ms buffer
+    }
+  }
+
+  initNotesEditor() {
+    // Auto-convert "- " to bullet points (same as journal notes)
 
     // Step 2 buttons
     this.elements.cancel2Btn?.addEventListener('click', () => this.close());
@@ -285,6 +458,7 @@ class TradeWizard {
     // Entry, stop, shares, target inputs - sanitize and validate as user types
     this.elements.wizardEntryPrice?.addEventListener('input', (e) => this.sanitizeEntryPriceInput(e));
     this.elements.wizardStopLoss?.addEventListener('input', (e) => this.sanitizeStopLossInput(e));
+    this.elements.wizardStrikePrice?.addEventListener('input', (e) => this.sanitizeStrikePriceInput(e));
     this.elements.wizardShares?.addEventListener('input', (e) => this.sanitizeSharesInput(e));
     this.elements.wizardTargetPrice?.addEventListener('input', (e) => this.sanitizeTargetPriceInput(e));
     this.elements.wizardRiskDollar?.addEventListener('input', (e) => this.sanitizeRiskDollarInput(e));
@@ -404,6 +578,40 @@ class TradeWizard {
     if (this.elements.wizardTargetPrice) this.elements.wizardTargetPrice.value = '';
     // Date will be auto-set in open() method
 
+    // Reset asset type toggle to Shares mode
+    if (this.elements.assetTypeButtons) {
+      this.elements.assetTypeButtons.forEach(b => b.classList.remove('active'));
+      this.elements.assetTypeButtons[0]?.classList.add('active'); // Shares is first
+      this.elements.assetTypeToggle?.setAttribute('data-active', '0');
+    }
+
+    // Reset label to "Shares"
+    if (this.elements.wizardSharesLabel) {
+      this.elements.wizardSharesLabel.textContent = 'Shares';
+      // Remove options-mode class
+      const sharesInputGroup = this.elements.wizardSharesLabel.closest('.input-group');
+      if (sharesInputGroup) {
+        sharesInputGroup.classList.remove('options-mode');
+      }
+    }
+
+    // Hide options fields
+    if (this.elements.optionsStrikeRow) {
+      this.elements.optionsStrikeRow.style.display = 'none';
+      this.elements.wizardStrikePrice.value = '';
+    }
+    if (this.elements.optionsExpirationRow) {
+      this.elements.optionsExpirationRow.style.display = 'none';
+      this.elements.wizardExpirationDate.value = '';
+    }
+
+    // Reset option type toggle to Call
+    if (this.elements.optionTypeButtons) {
+      this.elements.optionTypeButtons.forEach(b => b.classList.remove('active'));
+      this.elements.optionTypeButtons[0]?.classList.add('active'); // Call is first
+      this.elements.optionTypeToggle?.setAttribute('data-active', '0');
+    }
+
     // Reset Step 2 buttons
     this.elements.setupBtns?.forEach(b => b.classList.remove('active'));
     this.elements.convictionStars?.forEach(s => s.classList.remove('active'));
@@ -487,12 +695,41 @@ class TradeWizard {
       return false;
     }
 
-    // Validate shares (required)
+    // Determine if in Options mode by checking active toggle button
+    const activeAssetTypeBtn = Array.from(this.elements.assetTypeButtons || []).find(b => b.classList.contains('active'));
+    const isOptionsMode = activeAssetTypeBtn?.dataset.assetType === 'options';
+
+    // Validate strike price (required for Options mode)
+    if (isOptionsMode) {
+      const strikePrice = parseFloat(this.elements.wizardStrikePrice?.value);
+      if (!strikePrice || isNaN(strikePrice) || strikePrice <= 0) {
+        this.showInputError(
+          this.elements.wizardStrikePrice,
+          this.elements.wizardStrikePriceError,
+          'Strike price must be greater than 0'
+        );
+        return false;
+      }
+
+      // Validate expiration date (required for Options mode)
+      const expirationDate = this.elements.wizardExpirationDate?.value;
+      if (!expirationDate) {
+        this.showInputError(
+          this.elements.wizardExpirationDate,
+          this.elements.wizardExpirationDateError,
+          'Expiration date is required'
+        );
+        return false;
+      }
+    }
+
+    // Validate shares/contracts (required)
     if (!shares || isNaN(shares) || shares <= 0) {
+      const fieldLabel = isOptionsMode ? 'Contracts' : 'Shares';
       this.showInputError(
         this.elements.wizardShares,
         this.elements.wizardSharesError,
-        'Shares must be greater than 0'
+        `${fieldLabel} must be greater than 0`
       );
       return false;
     }
@@ -897,17 +1134,26 @@ class TradeWizard {
       btn.disabled = !canCalculate;
     });
 
-    // Auto-select 5R if buttons just became enabled and no button is selected and no target entered
+    // Auto-populate target price if a button is active and target is empty
     if (canCalculate) {
-      const hasActiveButton = Array.from(this.elements.wizardRMultipleBtns).some(btn => btn.classList.contains('active'));
       const targetValue = this.elements.wizardTargetPrice?.value.trim();
 
-      if (!hasActiveButton && !targetValue) {
-        const fiveRBtn = Array.from(this.elements.wizardRMultipleBtns).find(btn => btn.dataset.r === '5');
-        if (fiveRBtn) {
-          this.elements.wizardRMultipleBtns.forEach(b => b.classList.remove('active'));
-          fiveRBtn.classList.add('active');
-          this.setTargetFromRMultiple(5);
+      // If target is empty, calculate based on active button
+      if (!targetValue) {
+        const activeBtn = Array.from(this.elements.wizardRMultipleBtns).find(btn => btn.classList.contains('active'));
+
+        if (activeBtn) {
+          // Calculate target based on currently active button
+          const rMultiple = parseFloat(activeBtn.dataset.r);
+          this.setTargetFromRMultiple(rMultiple);
+        } else {
+          // No button active, auto-select 5R
+          const fiveRBtn = Array.from(this.elements.wizardRMultipleBtns).find(btn => btn.dataset.r === '5');
+          if (fiveRBtn) {
+            this.elements.wizardRMultipleBtns.forEach(b => b.classList.remove('active'));
+            fiveRBtn.classList.add('active');
+            this.setTargetFromRMultiple(5);
+          }
         }
       }
     }
@@ -928,6 +1174,12 @@ class TradeWizard {
     }
 
     this.updateTargetRDisplay();
+  }
+
+  isOptionsMode() {
+    // Check if the Options toggle button is active
+    const activeBtn = Array.from(this.elements.assetTypeButtons || []).find(b => b.classList.contains('active'));
+    return activeBtn?.dataset.assetType === 'options';
   }
 
   updateRiskButtons() {
@@ -955,14 +1207,16 @@ class TradeWizard {
 
     if (entry <= 0 || stop <= 0 || entry === stop || accountSize <= 0) return;
 
-    const riskPerShare = entry - stop;
+    // For options: 1 contract = 100 shares
+    const multiplier = this.isOptionsMode() ? 100 : 1;
+    const riskPerUnit = (entry - stop) * multiplier;
     const riskDollars = accountSize * (riskPercent / 100);
-    const shares = Math.floor(riskDollars / riskPerShare);
+    const units = Math.floor(riskDollars / riskPerUnit);
 
-    // Update shares input and risk dollar display programmatically
+    // Update shares/contracts input and risk dollar display programmatically
     this.updatingProgrammatically = true;
     if (this.elements.wizardShares) {
-      this.elements.wizardShares.value = shares;
+      this.elements.wizardShares.value = units;
     }
     if (this.elements.wizardRiskDollar) {
       this.elements.wizardRiskDollar.value = riskDollars.toFixed(2);
@@ -985,14 +1239,16 @@ class TradeWizard {
       return;
     }
 
-    // Calculate shares from risk dollars
-    const riskPerShare = entry - stop;
-    const shares = Math.floor(riskDollars / riskPerShare);
+    // Calculate shares/contracts from risk dollars
+    // For options: 1 contract = 100 shares
+    const multiplier = this.isOptionsMode() ? 100 : 1;
+    const riskPerUnit = (entry - stop) * multiplier;
+    const units = Math.floor(riskDollars / riskPerUnit);
 
-    // Update shares input programmatically
+    // Update shares/contracts input programmatically
     this.updatingProgrammatically = true;
     if (this.elements.wizardShares) {
-      this.elements.wizardShares.value = shares;
+      this.elements.wizardShares.value = units;
     }
     this.updatingProgrammatically = false;
 
@@ -1029,13 +1285,15 @@ class TradeWizard {
 
     const entry = parseFloat(this.elements.wizardEntryPrice?.value) || 0;
     const stop = parseFloat(this.elements.wizardStopLoss?.value) || 0;
-    const shares = parseInt(this.elements.wizardShares?.value) || 0;
+    const units = parseInt(this.elements.wizardShares?.value) || 0;
 
     // Calculate risk dollars
+    // For options: 1 contract = 100 shares
     let riskDollars = 0;
-    if (entry > 0 && stop > 0 && shares > 0 && entry !== stop) {
-      const riskPerShare = entry - stop;
-      riskDollars = riskPerShare * shares;
+    if (entry > 0 && stop > 0 && units > 0 && entry !== stop) {
+      const multiplier = this.isOptionsMode() ? 100 : 1;
+      const riskPerUnit = (entry - stop) * multiplier;
+      riskDollars = riskPerUnit * units;
     }
 
     // Display formatted value
@@ -1108,6 +1366,10 @@ class TradeWizard {
     if (errorElement) {
       errorElement.textContent = message;
       errorElement.classList.add('input-error--visible');
+      // Remove inline display: none if present (for full-width errors)
+      if (errorElement.style.display === 'none') {
+        errorElement.style.display = 'block';
+      }
     }
   }
 
@@ -1122,6 +1384,10 @@ class TradeWizard {
     if (errorElement) {
       errorElement.classList.remove('input-error--visible');
       errorElement.textContent = '';
+      // Restore display: none for full-width errors that should be hidden
+      if (errorElement.id === 'wizardStrikePriceError') {
+        errorElement.style.display = 'none';
+      }
     }
   }
 
@@ -1131,6 +1397,8 @@ class TradeWizard {
       this.elements.wizardTicker,
       this.elements.wizardEntryPrice,
       this.elements.wizardStopLoss,
+      this.elements.wizardStrikePrice,
+      this.elements.wizardExpirationDate,
       this.elements.wizardShares,
       this.elements.wizardRiskDollar,
       this.elements.wizardTargetPrice,
@@ -1141,6 +1409,8 @@ class TradeWizard {
       this.elements.wizardTickerError,
       this.elements.wizardEntryPriceError,
       this.elements.wizardStopLossError,
+      this.elements.wizardStrikePriceError,
+      this.elements.wizardExpirationDateError,
       this.elements.wizardSharesError,
       this.elements.wizardRiskDollarError,
       this.elements.wizardTargetPriceError,
@@ -1302,6 +1572,28 @@ class TradeWizard {
     this.updateTargetRDisplay();
   }
 
+  sanitizeStrikePriceInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.wizardStrikePrice, this.elements.wizardStrikePriceError);
+
+    // Validate strike price if value is provided
+    const value = this.elements.wizardStrikePrice?.value.trim();
+    if (value) {
+      const strikePrice = parseFloat(value);
+      if (!isNaN(strikePrice) && strikePrice <= 0) {
+        this.showInputError(
+          this.elements.wizardStrikePrice,
+          this.elements.wizardStrikePriceError,
+          'Strike price must be greater than 0'
+        );
+        return;
+      }
+    }
+  }
+
   sanitizeSharesInput(e) {
     const input = e.target;
     let value = input.value;
@@ -1319,10 +1611,15 @@ class TradeWizard {
     if (value) {
       const shares = parseInt(value);
       if (!isNaN(shares) && shares <= 0) {
+        // Determine if in Options mode by checking active toggle button
+        const activeAssetTypeBtn = Array.from(this.elements.assetTypeButtons || []).find(b => b.classList.contains('active'));
+        const isOptionsMode = activeAssetTypeBtn?.dataset.assetType === 'options';
+        const fieldLabel = isOptionsMode ? 'Contracts' : 'Shares';
+
         this.showInputError(
           this.elements.wizardShares,
           this.elements.wizardSharesError,
-          'Shares must be greater than 0'
+          `${fieldLabel} must be greater than 0`
         );
         return; // Don't update state if there's an error
       }

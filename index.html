@@ -42,7 +42,7 @@
   <!-- Styles -->
   <link rel="stylesheet" href="src/styles/variables.css">
   <link rel="stylesheet" href="src/styles/base.css">
-  <link rel="stylesheet" href="src/components/styles/components.css">
+  <link rel="stylesheet" href="src/components/styles/components.css?v=25">
   <link rel="stylesheet" href="src/styles/layout.css">
   <link rel="stylesheet" href="src/styles/animations.css">
   <link rel="stylesheet" href="src/styles/nav.css">
@@ -858,7 +858,7 @@
           </div>
         </div>
         <div class="trim-summary__row" style="flex-wrap: wrap;">
-          <span class="trim-summary__label">Entry Price</span>
+          <span class="trim-summary__label">Entry</span>
           <span class="trim-summary__value trim-summary__value--display" id="trimEntryPrice">$0.00</span>
           <div class="input-wrapper input-wrapper--prefix input-wrapper--sm trim-summary__value--edit" id="trimEntryPriceEdit" style="display: none;">
             <span class="input-prefix">$</span>
@@ -1044,32 +1044,42 @@
         </div>
 
         <div class="wizard-step__content">
-          <div class="input-group">
-            <label class="input-label" for="wizardTicker">Ticker</label>
-            <div class="input-wrapper input-wrapper--with-status">
-              <input
-                type="text"
-                class="input input--mono input--lg"
-                id="wizardTicker"
-                placeholder="AAPL"
-                enterkeyhint="next"
-                tabindex="1"
-              >
-              <div class="input-status" id="wizardTickerStatus">
-                <svg class="input-status__spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                </svg>
-                <svg class="input-status__check" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
+          <!-- Grouped trade details box -->
+          <div class="wizard-field-group">
+            <div class="input-row">
+              <div class="input-group" style="flex: 1;">
+                <label class="input-label" for="wizardTicker">Ticker</label>
+              <div class="input-wrapper input-wrapper--with-status">
+                <input
+                  type="text"
+                  class="input input--mono input--lg"
+                  id="wizardTicker"
+                  placeholder="AAPL"
+                  enterkeyhint="next"
+                  tabindex="1"
+                >
+                <div class="input-status" id="wizardTickerStatus">
+                  <svg class="input-status__spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                  </svg>
+                  <svg class="input-status__check" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
               </div>
             </div>
-            <div class="input-error" id="wizardTickerError"></div>
+            <div class="input-group" style="display: flex; align-items: center; justify-content: flex-end; padding-top: 26px;">
+              <div class="toggle-switch" id="assetTypeToggle" data-active="0">
+                <button type="button" class="toggle-switch__option active" data-asset-type="shares">Shares</button>
+                <button type="button" class="toggle-switch__option" data-asset-type="options">Options</button>
+              </div>
+            </div>
           </div>
+          <div class="input-error" id="wizardTickerError" style="margin-top: -8px; margin-bottom: 8px;"></div>
 
           <div class="input-row">
             <div class="input-group">
-              <label class="input-label" for="wizardEntryPrice">Entry Price</label>
+              <label class="input-label" for="wizardEntryPrice">Entry</label>
               <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
                 <span class="input-prefix">$</span>
                 <input
@@ -1114,18 +1124,62 @@
             </div>
           </div>
 
-          <div class="input-group">
-            <label class="input-label" for="wizardShares">Shares</label>
-            <input
-              type="text"
-              class="input input--mono"
-              id="wizardShares"
-              placeholder="0"
-              enterkeyhint="next"
-              tabindex="4"
-            >
-            <div class="input-error" id="wizardSharesError"></div>
+          <!-- Options-only fields (hidden by default) -->
+          <div class="input-row" id="optionsStrikeRow" style="display: none;">
+            <div class="input-group">
+              <label class="input-label" for="wizardStrikePrice">Strike</label>
+              <div class="input-wrapper input-wrapper--prefix input-wrapper--stepper">
+                <span class="input-prefix">$</span>
+                <input
+                  type="text"
+                  class="input input--mono"
+                  id="wizardStrikePrice"
+                  placeholder="0.00"
+                  enterkeyhint="next"
+                  tabindex="3"
+                >
+                <div class="input-stepper">
+                  <button type="button" class="input-stepper__btn" data-target="wizardStrikePrice" data-direction="up" title="Increase by 0.01" tabindex="-1">+</button>
+                  <button type="button" class="input-stepper__btn" data-target="wizardStrikePrice" data-direction="down" title="Decrease by 0.01" tabindex="-1">−</button>
+                </div>
+              </div>
+            </div>
+            <div class="input-group" style="display: flex; align-items: center; justify-content: flex-end; padding-top: 26px;">
+              <div class="toggle-switch" id="optionTypeToggle" data-active="0">
+                <button type="button" class="toggle-switch__option active" data-option-type="call">Call</button>
+                <button type="button" class="toggle-switch__option" data-option-type="put">Put</button>
+              </div>
+            </div>
           </div>
+          <div class="input-error" id="wizardStrikePriceError" style="display: none; margin-top: -8px; margin-bottom: 8px;"></div>
+
+          <div class="input-group" id="optionsExpirationRow" style="display: none;">
+            <label class="input-label" for="wizardExpirationDate">Expiration Date</label>
+            <div class="input-wrapper input-wrapper--date">
+              <input
+                type="date"
+                class="input input--mono"
+                id="wizardExpirationDate"
+                tabindex="4"
+              >
+            </div>
+            <div class="input-error" id="wizardExpirationDateError"></div>
+          </div>
+
+            <div class="input-group">
+              <label class="input-label" for="wizardShares" id="wizardSharesLabel">Shares</label>
+              <input
+                type="text"
+                class="input input--mono"
+                id="wizardShares"
+                placeholder="0"
+                enterkeyhint="next"
+                tabindex="4"
+              >
+              <div class="input-error" id="wizardSharesError"></div>
+            </div>
+          </div>
+          <!-- End grouped trade details box -->
 
           <div class="input-group">
             <label class="input-label" for="wizardRiskDollar">
@@ -1189,12 +1243,14 @@
 
           <div class="input-group">
             <label class="input-label" for="wizardTradeDate">Trade Date</label>
-            <input
-              type="date"
-              class="input input--mono"
-              id="wizardTradeDate"
-              tabindex="7"
-            >
+            <div class="input-wrapper input-wrapper--date">
+              <input
+                type="date"
+                class="input input--mono"
+                id="wizardTradeDate"
+                tabindex="7"
+              >
+            </div>
             <div class="input-error" id="wizardTradeDateError"></div>
           </div>
         </div>
@@ -1358,6 +1414,6 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="src/main.js?v=36"></script>
 </body>
 </html>

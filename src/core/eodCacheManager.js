@@ -241,6 +241,7 @@ class EODCacheManager {
     }
 
     // Store snapshot
+    const existingData = this.cache.days[dateStr];
     this.cache.days[dateStr] = {
       balance: data.balance,
       realizedBalance: data.realizedBalance || data.balance,
@@ -251,7 +252,8 @@ class EODCacheManager {
       timestamp: data.timestamp || Date.now(),
       source: data.source || 'unknown',
       incomplete: data.incomplete || false,
-      missingTickers: data.missingTickers || []
+      missingTickers: data.missingTickers || [],
+      retryCount: data.retryCount ?? existingData?.retryCount ?? 0
     };
 
     // Update last saved day if this is more recent

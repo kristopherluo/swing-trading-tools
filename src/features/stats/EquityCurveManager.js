@@ -187,7 +187,8 @@ class EquityCurveManager {
     // Fetch missing prices
     if (tickersToFetch.length > 0) {
       console.log(`[EquityCurve] Fetching ${tickersToFetch.length} tickers from Twelve Data`);
-      await historicalPricesBatcher.batchFetchPrices(tickersToFetch);
+      const tickerDates = this._getOldestTradeDates(tickersToFetch);
+      await historicalPricesBatcher.batchFetchPrices(tickersToFetch, null, tickerDates);
     }
 
     // Recalculate EOD for each affected day
@@ -422,7 +423,8 @@ class EquityCurveManager {
     // Fetch missing prices from Twelve Data
     if (tickersToFetch.length > 0) {
       console.log(`[EquityCurve] Fetching ${tickersToFetch.length} tickers from Twelve Data`);
-      await historicalPricesBatcher.batchFetchPrices(tickersToFetch);
+      const tickerDates = this._getOldestTradeDates(tickersToFetch);
+      await historicalPricesBatcher.batchFetchPrices(tickersToFetch, null, tickerDates);
     }
 
     // ATOMIC SAVE: Calculate all days in memory first, then save all at once
@@ -486,6 +488,10 @@ class EquityCurveManager {
     // FIX: Mark as incomplete if any ticker prices are missing
     const incomplete = missingTickers.length > 0;
 
+    // Get existing retry count to increment if still incomplete
+    const existingData = eodCacheManager.getEODData(dateStr);
+    const currentRetryCount = existingData?.retryCount || 0;
+
     return {
       balance: balanceData.balance,
       realizedBalance: balanceData.realizedBalance,
@@ -495,12 +501,14 @@ class EquityCurveManager {
       cashFlow: dayCashFlow,
       timestamp: Date.now(),
       incomplete,
-      missingTickers
+      missingTickers,
+      retryCount: incomplete ? currentRetryCount + 1 : 0
     };
   }
 
   /**
    * Backfill incomplete days (days that failed to save properly)
+   * Days that have been retried MAX_RETRIES times are skipped to prevent infinite loops
    */
   async _backfillIncompleteDays() {
     const incompleteDays = eodCacheManager.getIncompleteDays();
@@ -509,9 +517,26 @@ class EquityCurveManager {
       return;
     }
 
-    console.log(`[EquityCurve] Found ${incompleteDays.length} incomplete days, backfilling`);
+    // Filter out days that have exceeded retry limit
+    const MAX_RETRIES = 3;
+    const daysToRetry = incompleteDays.filter(d =>
+      (d.data.retryCount || 0) < MAX_RETRIES
+    );
 
-    const daysToFill = incompleteDays.map(d => d.date);
+    if (daysToRetry.length === 0) {
+      const skippedCount = incompleteDays.length;
+      console.log(`[EquityCurve] ${skippedCount} incomplete days skipped (exceeded ${MAX_RETRIES} retry limit)`);
+      return;
+    }
+
+    const skippedCount = incompleteDays.length - daysToRetry.length;
+    if (skippedCount > 0) {
+      console.log(`[EquityCurve] Retrying ${daysToRetry.length} incomplete days (skipped ${skippedCount} with too many retries)`);
+    } else {
+      console.log(`[EquityCurve] Found ${incompleteDays.length} incomplete days, backfilling`);
+    }
+
+    const daysToFill = daysToRetry.map(d => d.date);
     await this._fillMissingEODData(daysToFill);
   }
 
@@ -567,6 +592,31 @@ class EquityCurveManager {
       const entryDateStr = this._getEntryDateString(trade);
       return !earliest || entryDateStr < earliest ? entryDateStr : earliest;
     }, null);
+  }
+
+  /**
+   * Get oldest trade date for each ticker (for dynamic historical price fetching)
+   */
+  _getOldestTradeDates(tickers) {
+    const result = {};
+    const trades = state.journal.entries;
+
+    for (const ticker of tickers) {
+      const tickerTrades = trades.filter(t => t.ticker === ticker);
+      if (tickerTrades.length === 0) {
+        result[ticker] = null;
+        continue;
+      }
+
+      const oldestDate = tickerTrades.reduce((oldest, trade) => {
+        const entryDate = this._getEntryDateString(trade);
+        return !oldest || entryDate < oldest ? entryDate : oldest;
+      }, null);
+
+      result[ticker] = oldestDate;
+    }
+
+    return result;
   }
 
   /**

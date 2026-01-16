@@ -357,3 +357,78 @@
     inset 0 1px 1px rgba(255, 255, 255, 0.1);
   text-shadow: 0 0 16px rgba(96, 165, 250, 0.8);
 }
+
+/* === Toggle Switch (Cyberpunk Style) === */
+
+.toggle-switch {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0;
+  position: relative;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 70%),
+    linear-gradient(145deg, #0a0a0a 0%, #000000 100%) !important;
+  border: 1.5px solid rgba(96, 165, 250, 0.3) !important;
+  border-radius: var(--border-radius);
+  padding: 2px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+.toggle-switch__option {
+  position: relative;
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-mono) !important;
+  font-size: var(--text-sm) !important;
+  font-weight: 600 !important;
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: calc(var(--border-radius) - 2px);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.toggle-switch__option:hover:not(.active) {
+  color: var(--text-primary) !important;
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.4) !important;
+  background: transparent !important;
+}
+
+.toggle-switch__option.active {
+  color: #60a5fa !important;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.2) 0%, transparent 70%),
+    linear-gradient(145deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
+  border: 1.5px solid rgba(96, 165, 250, 0.6) !important;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.7),
+    0 0 16px rgba(59, 130, 246, 0.3),
+    inset 0 0 12px rgba(59, 130, 246, 0.15),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08) !important;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.8) !important;
+}
+
+.toggle-switch__option:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.toggle-switch__option:active {
+  transform: none !important;
+}
+
+/* Smaller variant for inline use */
+.toggle-switch--sm {
+  padding: 1px;
+}
+
+.toggle-switch--sm .toggle-switch__option {
+  padding: var(--space-1-5) var(--space-3);
+  font-size: var(--text-xs) !important;
+}
