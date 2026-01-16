@@ -72,10 +72,6 @@ class StorageAdapter {
    */
   async _performMigration() {
     try {
-      console.log('[Storage] Checking for localStorage data to migrate...');
-
-      let migratedCount = 0;
-
       for (const key of this.migrationKeys) {
         const localValue = localStorage.getItem(key);
 
@@ -95,20 +91,11 @@ class StorageAdapter {
               }
 
               await localforage.setItem(key, valueToStore);
-              migratedCount++;
-              console.log(`[Storage] Migrated ${key} to IndexedDB`);
             } catch (e) {
               console.error(`[Storage] Failed to migrate ${key}:`, e);
             }
           }
         }
-      }
-
-      if (migratedCount > 0) {
-        console.log(`[Storage] ✅ Migration complete! Migrated ${migratedCount} items to IndexedDB`);
-        console.log('[Storage] localStorage data preserved for backup');
-      } else {
-        console.log('[Storage] No migration needed (IndexedDB already populated or no localStorage data)');
       }
 
       this.migrated = true;
@@ -174,7 +161,6 @@ class StorageAdapter {
   async clear() {
     try {
       await localforage.clear();
-      console.log('[Storage] Cleared all IndexedDB data');
     } catch (error) {
       console.error('[Storage] Error clearing storage:', error);
     }

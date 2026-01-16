@@ -165,14 +165,7 @@ export const priceTracker = {
     // Cached data might only have summary (from Alpha Vantage) without industry
     const cached = await this.getCachedCompanyData(ticker);
     if (cached && cached.industry) {
-      console.log(`[Company Profile] ✓ Using cached data for ${ticker}`);
       return cached;
-    }
-
-    if (cached && !cached.industry) {
-      console.log(`[Company Profile] Cached data for ${ticker} missing industry, fetching full profile...`);
-    } else {
-      console.log(`[Company Profile] Fetching from API for ${ticker}...`);
     }
 
     try {
@@ -205,11 +198,8 @@ export const priceTracker = {
         description: data.description || data.longBusinessSummary || ''
       };
 
-      console.log(`[Company Profile] ✓ Fetched data for ${ticker}, industry: ${profile.industry}`);
-
       // Cache the data
       await this.saveCompanyDataToCache(ticker, profile);
-      console.log(`[Company Profile] ✓ Saved to cache for ${ticker}`);
 
       return profile;
     } catch (error) {
@@ -234,7 +224,6 @@ export const priceTracker = {
       const age = Date.now() - entry.cachedAt;
       const thirtyDays = 30 * 24 * 60 * 60 * 1000;
       if (age >= thirtyDays) {
-        console.log(`[Summary Cache] ${ticker}: expired (${Math.round(age / (24 * 60 * 60 * 1000))} days old)`);
         return null;
       }
 
@@ -244,7 +233,6 @@ export const priceTracker = {
         summary: decompressText(entry.summary)
       };
 
-      console.log(`[Summary Cache] ✓ Hit for ${ticker} (age: ${Math.round(age / (24 * 60 * 60 * 1000))} days)`);
       return decompressed;
     } catch (e) {
       console.error('[Summary Cache] Error reading cache:', e);
@@ -281,11 +269,9 @@ export const priceTracker = {
       if (cache.accessOrder.length > MAX_SUMMARY_CACHE) {
         const toRemove = cache.accessOrder.shift(); // Remove oldest
         delete cache.summaries[toRemove];
-        console.log(`[Summary Cache] Evicted ${toRemove} (LRU)`);
       }
 
       await storage.setItem(SUMMARY_CACHE_KEY, cache);
-      console.log(`[Summary Cache] ✓ Saved ${ticker} (${cache.accessOrder.length}/${MAX_SUMMARY_CACHE} cached)`);
     } catch (e) {
       console.error('[Summary Cache] Error saving cache:', e);
     }
@@ -308,7 +294,6 @@ export const priceTracker = {
       throw new Error('Alpha Vantage API key not configured. Add it in Settings to fetch company summaries.');
     }
 
-    console.log(`[Summary Cache] Miss for ${ticker}, fetching from API...`);
     const summary = await this.fetchCompanySummaryFromAlphaVantage(ticker, alphaVantageKey);
 
     // Cache the result
@@ -328,8 +313,6 @@ export const priceTracker = {
 
     const data = await response.json();
 
-    console.log(`[Alpha Vantage] Response for ${ticker}:`, data);
-
     // Check for API errors
     if (data.Note) {
       throw new Error('Alpha Vantage API rate limit reached. Free tier: 25 calls/day, 5 calls/minute.');
@@ -340,7 +323,6 @@ export const priceTracker = {
     }
 
     if (!data.Name) {
-      console.warn(`[Alpha Vantage] No Name field in response for ${ticker}. Response keys:`, Object.keys(data));
       throw new Error('No company overview data available from Alpha Vantage');
     }
 

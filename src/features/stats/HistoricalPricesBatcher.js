@@ -148,11 +148,6 @@ class HistoricalPricesBatcher {
           const ticker = tickers[0];
           const prices = {};
 
-          console.log(`[Prices] ${ticker}: received ${data.values.length} data points`);
-          if (data.values.length > 0) {
-            console.log(`[Prices] ${ticker}: sample API response:`, data.values[0]);
-          }
-
           for (const item of data.values) {
             const date = item.datetime;
             prices[date] = {
@@ -163,8 +158,6 @@ class HistoricalPricesBatcher {
               volume: parseInt(item.volume) || 0
             };
           }
-
-          console.log(`[Prices] ${ticker}: stored ${Object.keys(prices).length} days, sample stored data:`, prices[data.values[0].datetime]);
 
           if (!this.cache[ticker]) {
             this.cache[ticker] = {};
@@ -219,15 +212,6 @@ class HistoricalPricesBatcher {
       }
 
       // Log summary of what was fetched
-      const successTickers = Object.keys(results);
-      const failedTickers = tickers.filter(t => !results[t]);
-
-      if (failedTickers.length > 0) {
-        console.warn(`[Prices] Batch complete: ${successTickers.length}/${tickers.length} tickers fetched. Failed: ${failedTickers.join(', ')}`);
-      } else if (successTickers.length > 0) {
-        console.log(`[Prices] Batch complete: successfully fetched ${successTickers.length} tickers`);
-      }
-
       this.saveCache();
       return results;
     } catch (error) {
@@ -267,12 +251,7 @@ class HistoricalPricesBatcher {
       }
     }
 
-    if (tickersUsingCache.length > 0) {
-      console.log(`[Prices] Using cached data for ${tickersUsingCache.length} tickers:`, tickersUsingCache.join(', '));
-    }
-
     if (tickersToFetch.length === 0) {
-      console.log('[Prices] All tickers using cache - no API calls needed');
       return results;
     }
 
@@ -284,15 +263,11 @@ class HistoricalPricesBatcher {
         if (tickerDates[ticker]) {
           const tradeDate = new Date(tickerDates[ticker]);
           const daysAgo = Math.ceil((today - tradeDate) / (1000 * 60 * 60 * 24));
-          console.log(`[Prices] ${ticker}: need data from ${tickerDates[ticker]} (${daysAgo} days ago)`);
           outputSize = Math.max(outputSize, daysAgo + 10); // +10 day buffer
         }
       }
     }
     outputSize = Math.min(outputSize, 500); // Cap at 500 days max
-    console.log(`[Prices] Fetching with outputSize: ${outputSize}`);
-
-    console.log(`[Prices] Fetching new data for ${tickersToFetch.length} tickers (${outputSize} days):`, tickersToFetch.join(', '));
 
     // Group into batches of BATCH_SIZE
     const batches = [];
@@ -364,8 +339,6 @@ class HistoricalPricesBatcher {
     // Check if latest cached date is recent (within last 7 days)
     const daysSinceUpdate = (new Date() - new Date(latestCached)) / (1000 * 60 * 60 * 24);
     const isRecent = daysSinceUpdate <= 7;
-
-    console.log(`[Prices] ${ticker}: cache check - need from ${startDate}, have ${earliestCached} to ${latestCached}, covers: ${coversStartDate}, recent: ${isRecent}`);
 
     return coversStartDate && isRecent;
   }

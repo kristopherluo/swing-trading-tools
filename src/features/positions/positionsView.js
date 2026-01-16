@@ -11,6 +11,7 @@ import { priceTracker } from '../../core/priceTracker.js';
 import { showToast } from '../../components/ui/ui.js';
 import { sharedMetrics } from '../../shared/SharedMetrics.js';
 import { FilterPopup } from '../../shared/FilterPopup.js';
+import accountBalanceCalculator from '../../shared/AccountBalanceCalculator.js';
 
 class PositionsView {
   constructor() {
@@ -387,14 +388,15 @@ class PositionsView {
     // Calculate NET risk using SharedMetrics (same calculation as Stats page!)
     const totalRisk = sharedMetrics.getOpenRisk();
 
-    // Calculate total unrealized P&L
-    let totalPnL = 0;
-    for (const trade of activeTrades) {
-      const pnl = priceTracker.calculateUnrealizedPnL(trade);
-      if (pnl) {
-        totalPnL += pnl.unrealizedPnL;
-      }
-    }
+    // Calculate total unrealized P&L using centralized calculator
+    const currentPrices = priceTracker.getPricesAsObject();
+    const balanceData = accountBalanceCalculator.calculateCurrentBalance({
+      startingBalance: state.settings.startingAccountSize,
+      allTrades: state.journal.entries,
+      cashFlowTransactions: state.cashFlow.transactions,
+      currentPrices
+    });
+    const totalPnL = balanceData.unrealizedPnL;
 
     const riskPercent = (totalRisk / state.account.currentSize) * 100;
 
@@ -453,7 +455,6 @@ class PositionsView {
       // If we have data but it's missing industry (only has summary from Alpha Vantage),
       // fetch the full profile from Finnhub
       if (data && !data.industry) {
-        console.log(`[Positions] ${ticker} has summary but no industry, fetching profile...`);
         const profile = await priceTracker.fetchCompanyProfile(ticker);
         if (profile) {
           data = profile;
@@ -461,7 +462,6 @@ class PositionsView {
         await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit delay
       } else if (!data) {
         // No data at all, try to fetch profile
-        console.log(`[Positions] No data for ${ticker}, fetching profile...`);
         const profile = await priceTracker.fetchCompanyProfile(ticker);
         if (profile) {
           data = profile;
@@ -469,13 +469,10 @@ class PositionsView {
         await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit delay
       }
 
-      console.log(`[Positions] Final company data for ${ticker}:`, data);
       if (data && data.industry) {
         companyDataMap.set(ticker, data);
       }
     }
-
-    console.log(`[Positions] Company data map with industry: ${companyDataMap.size}`);
 
     this.elements.grid.innerHTML = positions.map(trade => {
       const isOptions = trade.assetType === 'options';

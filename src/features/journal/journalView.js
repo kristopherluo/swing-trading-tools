@@ -1256,14 +1256,10 @@ class JournalView {
         chartEndDate = contextEndDate.toISOString().split('T')[0];
       }
 
-      console.log(`[Chart] Need data from ${chartStartDate} to ${chartEndDate} for ${trade.ticker}`);
-
       if (cachedPriceData && this._hasDataForDateRange(cachedPriceData, chartStartDate, chartEndDate)) {
-        console.log(`[Chart] Using cached data, ${Object.keys(cachedPriceData).length} days available`);
         // Use cached data - convert to candle format
         candles = this._convertPricesToCandles(cachedPriceData, chartStartDate, chartEndDate);
       } else {
-        console.log(`[Chart] Fetching fresh data for ${trade.ticker}`);
         // Fetch from Twelve Data (will be cached permanently by historicalPricesBatcher)
         // Pass tickerDates so it knows to fetch enough data (6 months + buffer)
         const tickerDates = { [trade.ticker]: chartStartDate };
@@ -1271,21 +1267,7 @@ class JournalView {
 
         // Now get the cached data
         const freshData = historicalPricesBatcher.cache[trade.ticker];
-        console.log(`[Chart] Fetched ${Object.keys(freshData || {}).length} days of data`);
-
-        // Check if first entry has volume
-        const firstDate = Object.keys(freshData || {}).sort()[0];
-        if (firstDate) {
-          console.log(`[Chart] Sample data for ${firstDate}:`, freshData[firstDate]);
-        }
-
         candles = this._convertPricesToCandles(freshData, chartStartDate, chartEndDate);
-      }
-
-      console.log(`[Chart] Converted to ${candles.length} candles`);
-      if (candles.length > 0) {
-        console.log(`[Chart] First candle:`, candles[0]);
-        console.log(`[Chart] Last candle:`, candles[candles.length - 1]);
       }
 
       // Clear loading message
@@ -1619,9 +1601,6 @@ class JournalView {
     const daysDiff = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
     const expectedBusinessDays = Math.floor(daysDiff * 0.7); // Rough estimate: 70% of days are business days
     const hasEnoughData = datesInRange >= (expectedBusinessDays * 0.8); // Have at least 80% of expected days
-
-    console.log(`[Chart] Cache check: earliest=${earliestCached}, latest=${latestCached}, need ${startDate} to ${endDate}`);
-    console.log(`[Chart] Cache has ${datesInRange} days in range, expected ~${expectedBusinessDays}, covers start: ${coversStartDate}, covers end: ${coversEndDate}, enough: ${hasEnoughData}`);
 
     return coversStartDate && coversEndDate && hasEnoughData;
   }
