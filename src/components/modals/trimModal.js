@@ -148,6 +148,7 @@ class TrimModal {
     this.elements.entryPriceInput?.addEventListener('input', (e) => this.sanitizeEntryPriceInput(e));
     this.elements.originalStopInput?.addEventListener('input', (e) => this.sanitizeOriginalStopInput(e));
     this.elements.targetInput?.addEventListener('input', (e) => this.sanitizeTargetInput(e));
+    this.elements.strikeInput?.addEventListener('input', (e) => this.sanitizeStrikeInput(e));
     this.elements.confirmBtn?.addEventListener('click', () => this.confirm());
     this.elements.onlyMoveStopCheckbox?.addEventListener('change', () => this.handleOnlyMoveStopToggle());
     this.elements.onlyChangeTargetCheckbox?.addEventListener('change', () => this.handleOnlyChangeTargetToggle());
@@ -491,7 +492,9 @@ class TrimModal {
 
     const sharesRemaining = remainingShares - sharesToClose;
 
-    const profitPerShare = exitPrice - this.currentTrade.entry;
+    // For options, multiply by 100 (contract multiplier)
+    const multiplier = this.currentTrade.assetType === 'options' ? 100 : 1;
+    const profitPerShare = (exitPrice - this.currentTrade.entry) * multiplier;
     const totalPnL = profitPerShare * sharesToClose;
     const isProfit = totalPnL >= 0;
 
@@ -1146,6 +1149,27 @@ class TrimModal {
           this.elements.originalStopInput,
           this.elements.originalStopError,
           'Original stop must be greater than 0'
+        );
+      }
+    }
+  }
+
+  sanitizeStrikeInput(e) {
+    // Use generic decimal sanitizer
+    this.sanitizeDecimalInput(e);
+
+    // Clear any existing error
+    this.clearInputError(this.elements.strikeInput, this.elements.strikeError);
+
+    // Validate strike price if value is provided
+    const value = this.elements.strikeInput?.value.trim();
+    if (value) {
+      const strikePrice = parseFloat(value);
+      if (!isNaN(strikePrice) && strikePrice <= 0) {
+        this.showInputError(
+          this.elements.strikeInput,
+          this.elements.strikeError,
+          'Strike price must be greater than 0'
         );
       }
     }
