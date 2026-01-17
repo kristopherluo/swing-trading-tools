@@ -22,6 +22,8 @@ class Settings {
     this.withdrawDatePicker = null;
     // Store previous valid starting account size
     this.previousValidAccountSize = null;
+    // Store event listener unsubscribe functions for cleanup
+    this.eventUnsubscribers = [];
   }
 
   async init() {
@@ -32,43 +34,79 @@ class Settings {
     await this.loadAndApply();
     await this.updateStorageMonitor();
 
-    // Listen for account changes
-    state.on('accountSizeChanged', (size) => {
-      const unrealizedPnL = this.updateAccountDisplay(size);
-      this.updateSummary(unrealizedPnL);
-    });
+    // Listen for account changes (store unsubscribers for cleanup)
+    this.eventUnsubscribers.push(
+      state.on('accountSizeChanged', (size) => {
+        const unrealizedPnL = this.updateAccountDisplay(size);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
 
     // Listen for price updates to refresh header with unrealized P&L
-    state.on('pricesUpdated', () => {
-      const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
-      this.updateSummary(unrealizedPnL);
-    });
+    this.eventUnsubscribers.push(
+      state.on('pricesUpdated', () => {
+        const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
 
     // Listen for journal changes to refresh unrealized P&L
-    state.on('journalEntryAdded', () => {
-      const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
-      this.updateSummary(unrealizedPnL);
-    });
-    state.on('journalEntryUpdated', () => {
-      const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
-      this.updateSummary(unrealizedPnL);
-    });
-    state.on('journalEntryDeleted', () => {
-      const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
-      this.updateSummary(unrealizedPnL);
-    });
+    this.eventUnsubscribers.push(
+      state.on('journalEntryAdded', () => {
+        const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
+    this.eventUnsubscribers.push(
+      state.on('journalEntryUpdated', () => {
+        const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
+    this.eventUnsubscribers.push(
+      state.on('journalEntryDeleted', () => {
+        const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
 
     // Listen for cash flow changes
-    state.on('cashFlowChanged', () => {
-      const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
-      this.updateSummary(unrealizedPnL);
-    });
+    this.eventUnsubscribers.push(
+      state.on('cashFlowChanged', () => {
+        const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
 
     // Listen for settings changes (starting account size)
-    state.on('settingsChanged', () => {
-      const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
-      this.updateSummary(unrealizedPnL);
-    });
+    this.eventUnsubscribers.push(
+      state.on('settingsChanged', () => {
+        const unrealizedPnL = this.updateAccountDisplay(state.account.currentSize);
+        this.updateSummary(unrealizedPnL);
+      })
+    );
+  }
+
+  /**
+   * Cleanup method to prevent memory leaks
+   * Call this if the settings module needs to be reinitialized
+   */
+  destroy() {
+    // Unsubscribe from all state events
+    this.eventUnsubscribers.forEach(unsubscribe => unsubscribe());
+    this.eventUnsubscribers = [];
+
+    // Destroy flatpickr instances
+    if (this.depositDatePicker) {
+      this.depositDatePicker.destroy();
+      this.depositDatePicker = null;
+    }
+    if (this.withdrawDatePicker) {
+      this.withdrawDatePicker.destroy();
+      this.withdrawDatePicker = null;
+    }
+
+    console.log('[Settings] Destroyed and cleaned up event listeners');
   }
 
   cacheElements() {

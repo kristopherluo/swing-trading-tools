@@ -15,7 +15,8 @@ class AppState {
         defaultRiskPercent: 1,
         defaultMaxPositionPercent: 100,
         dynamicAccountEnabled: true,
-        theme: 'dark'
+        theme: 'dark',
+        twelveDataBatchSize: 8 // Twelve Data API batch size (8 for free tier, higher for paid)
       },
 
       account: {

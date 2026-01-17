@@ -6,13 +6,23 @@
 import { formatDate } from '../../utils/marketHours.js';
 import { sleep } from '../../core/utils.js';
 import { storage } from '../../utils/storage.js';
+import { state } from '../../core/state.js';
+import { validateAndMigrate, addSchemaVersion } from '../../utils/migrations.js';
 
 class HistoricalPricesBatcher {
   constructor() {
     this.cache = {}; // { ticker: { 'YYYY-MM-DD': { open, high, low, close } } }
+    this.metadata = {}; // { ticker: { fetchedAt: timestamp } }
     this.initialized = false;
     this.apiKey = null;
-    this.BATCH_SIZE = 8; // Twelve Data free tier supports up to 8 symbols per call
+  }
+
+  /**
+   * Get batch size from settings (configurable for different API tiers)
+   * @returns {number} Batch size (default 8 for free tier)
+   */
+  get batchSize() {
+    return state.settings.twelveDataBatchSize || 8;
   }
 
   /**
@@ -90,6 +100,13 @@ class HistoricalPricesBatcher {
         this.cache[ticker] = {};
       }
       Object.assign(this.cache[ticker], prices);
+
+      // Update metadata with fetchedAt timestamp
+      if (!this.metadata[ticker]) {
+        this.metadata[ticker] = {};
+      }
+      this.metadata[ticker].fetchedAt = Date.now();
+
       this.saveCache();
 
       return prices;
@@ -115,7 +132,7 @@ class HistoricalPricesBatcher {
 
     try {
       // Join tickers with commas (max 8 for free tier)
-      const symbols = tickers.slice(0, this.BATCH_SIZE).join(',');
+      const symbols = tickers.slice(0, this.batchSize).join(',');
       const url = `https://api.twelvedata.com/time_series?symbol=${symbols}&interval=1day&outputsize=${outputSize}&apikey=${this.apiKey}`;
 
       const response = await fetch(url);
@@ -163,6 +180,13 @@ class HistoricalPricesBatcher {
             this.cache[ticker] = {};
           }
           Object.assign(this.cache[ticker], prices);
+
+          // Update metadata with fetchedAt timestamp
+          if (!this.metadata[ticker]) {
+            this.metadata[ticker] = {};
+          }
+          this.metadata[ticker].fetchedAt = Date.now();
+
           results[ticker] = prices;
         }
       } else {
@@ -206,6 +230,13 @@ class HistoricalPricesBatcher {
               this.cache[ticker] = {};
             }
             Object.assign(this.cache[ticker], prices);
+
+            // Update metadata with fetchedAt timestamp
+            if (!this.metadata[ticker]) {
+              this.metadata[ticker] = {};
+            }
+            this.metadata[ticker].fetchedAt = Date.now();
+
             results[ticker] = prices;
           }
         }
@@ -269,10 +300,10 @@ class HistoricalPricesBatcher {
     }
     outputSize = Math.min(outputSize, 500); // Cap at 500 days max
 
-    // Group into batches of BATCH_SIZE
+    // Group into batches of batchSize
     const batches = [];
-    for (let i = 0; i < tickersToFetch.length; i += this.BATCH_SIZE) {
-      batches.push(tickersToFetch.slice(i, i + this.BATCH_SIZE));
+    for (let i = 0; i < tickersToFetch.length; i += this.batchSize) {
+      batches.push(tickersToFetch.slice(i, i + this.batchSize));
     }
 
     // Fetch each batch with delay between batches
@@ -281,7 +312,7 @@ class HistoricalPricesBatcher {
 
       if (onProgress) {
         onProgress({
-          current: i * this.BATCH_SIZE + batch.length,
+          current: i * this.batchSize + batch.length,
           total: tickersToFetch.length,
           ticker: batch.join(', ')
         });
@@ -301,7 +332,7 @@ class HistoricalPricesBatcher {
 
   /**
    * Check if we have historical data for a ticker
-   * Historical prices don't expire - once cached, they're always valid
+   * Uses fetchedAt timestamp to determine freshness (more reliable than data dates)
    */
   hasRecentData(ticker) {
     if (!this.cache[ticker]) return false;
@@ -309,8 +340,14 @@ class HistoricalPricesBatcher {
     const dates = Object.keys(this.cache[ticker]);
     if (dates.length === 0) return false;
 
-    // Check if cache has data from within the last 7 days
-    // This ensures we refetch if cache is stale
+    // Check fetchedAt timestamp if available (preferred method)
+    if (this.metadata[ticker]?.fetchedAt) {
+      const daysSinceFetch = (Date.now() - this.metadata[ticker].fetchedAt) / (1000 * 60 * 60 * 24);
+      // If fetched within the last 7 days, consider it recent
+      return daysSinceFetch <= 7;
+    }
+
+    // Fallback to checking data dates (for backward compatibility with old cache)
     const mostRecentDate = dates.sort().reverse()[0]; // Get latest date
     const daysSinceUpdate = (new Date() - new Date(mostRecentDate)) / (1000 * 60 * 60 * 24);
 
@@ -374,31 +411,72 @@ class HistoricalPricesBatcher {
 
 
   /**
-   * Load cache from IndexedDB
+   * Load cache from IndexedDB with schema migration support
    */
   async loadCache() {
     try {
       const saved = await storage.getItem('historicalPriceCache');
       if (saved) {
-        this.cache = saved;
+        // Validate and migrate if needed
+        const migrated = validateAndMigrate('historicalPriceCache', saved);
+
+        // Handle both old format (just prices) and new format (with __metadata)
+        if (migrated.__metadata) {
+          this.metadata = migrated.__metadata;
+          delete migrated.__metadata; // Remove metadata from cache object
+          delete migrated.__schemaVersion; // Remove version marker
+          this.cache = migrated;
+        } else {
+          // Old format without metadata
+          this.cache = migrated;
+          this.metadata = {};
+        }
       }
     } catch (error) {
       console.error('Failed to load historical price cache:', error);
       this.cache = {};
+      this.metadata = {};
     }
   }
 
   /**
    * Save cache to IndexedDB
-   * Automatically cleans up old data if quota exceeded
+   * Proactively cleans up if approaching quota (80%), then handles quota errors reactively
    */
   async saveCache() {
+    // Proactive cleanup: Check if approaching 80% quota before saving
     try {
-      await storage.setItem('historicalPriceCache', this.cache);
+      const approachingQuota = await storage.isApproachingQuota();
+      if (approachingQuota) {
+        console.warn('[HistoricalPrices] Storage at 80% capacity, running proactive cleanup...');
+
+        const { state } = await import('../../core/state.js');
+        const today = new Date();
+        const cutoffDate = new Date(today);
+        cutoffDate.setDate(cutoffDate.getDate() - 30);
+        const cutoffDateStr = formatDate(cutoffDate);
+        const removedCount = this.cleanupPricesOlderThan(cutoffDateStr, state.journal.entries);
+
+        if (removedCount > 0) {
+          console.log(`[HistoricalPrices] Proactive cleanup: removed ${removedCount} old data points`);
+        }
+      }
+    } catch (quotaCheckError) {
+      console.warn('[HistoricalPrices] Could not check quota, proceeding with save:', quotaCheckError);
+    }
+
+    // Attempt to save
+    try {
+      // Combine cache and metadata for storage, add schema version
+      const dataToSave = addSchemaVersion('historicalPriceCache', {
+        ...this.cache,
+        __metadata: this.metadata
+      });
+      await storage.setItem('historicalPriceCache', dataToSave);
     } catch (error) {
-      // If quota exceeded, clean up old data and retry
+      // Reactive cleanup: If quota exceeded despite proactive check, clean up and retry
       if (error.name === 'QuotaExceededError') {
-        console.warn('[HistoricalPrices] Storage quota exceeded, cleaning up old data...');
+        console.warn('[HistoricalPrices] Storage quota exceeded, emergency cleanup...');
 
         // Import state to get trades for cleanup
         import('../../core/state.js').then(({ state }) => {
@@ -410,14 +488,19 @@ class HistoricalPricesBatcher {
           const removedCount = this.cleanupPricesOlderThan(cutoffDateStr, state.journal.entries);
 
           if (removedCount > 0) {
-            console.log(`[HistoricalPrices] Removed ${removedCount} old data points, retrying save...`);
-            storage.setItem('historicalPriceCache', this.cache).then(() => {
-              console.log('[HistoricalPrices] Cache saved successfully after cleanup');
+            console.log(`[HistoricalPrices] Emergency: removed ${removedCount} old data points, retrying save...`);
+            const dataToSave = addSchemaVersion('historicalPriceCache', {
+              ...this.cache,
+              __metadata: this.metadata
+            });
+            storage.setItem('historicalPriceCache', dataToSave).then(() => {
+              console.log('[HistoricalPrices] Cache saved successfully after emergency cleanup');
             }).catch(retryError => {
               console.error('[HistoricalPrices] Still cannot save cache after cleanup:', retryError);
               // Last resort: clear entire cache
               console.warn('[HistoricalPrices] Clearing entire historical price cache...');
               this.cache = {};
+              this.metadata = {};
               storage.removeItem('historicalPriceCache');
             });
           } else {
@@ -426,10 +509,11 @@ class HistoricalPricesBatcher {
             // Clear entire cache as last resort
             console.warn('[HistoricalPrices] Clearing entire historical price cache...');
             this.cache = {};
+            this.metadata = {};
             storage.removeItem('historicalPriceCache');
           }
         }).catch(err => {
-          console.error('[HistoricalPrices] Error during cleanup:', err);
+          console.error('[HistoricalPrices] Error during emergency cleanup:', err);
         });
       } else {
         console.error('Failed to save historical price cache:', error);
@@ -443,8 +527,10 @@ class HistoricalPricesBatcher {
   clearCache(ticker = null) {
     if (ticker) {
       delete this.cache[ticker];
+      delete this.metadata[ticker];
     } else {
       this.cache = {};
+      this.metadata = {};
     }
     this.saveCache();
   }

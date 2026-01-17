@@ -377,20 +377,39 @@ class EquityCurveManager {
 
   /**
    * Fill missing EOD data by fetching historical prices from Twelve Data
+   * @param {Array<string>} missingDays - Array of date strings to fill
+   * @param {Object} incompleteDaysData - Optional map of date -> { missingTickers, existingData }
+   *                                      For incomplete day retries, only fetches specific missing tickers
    */
-  async _fillMissingEODData(missingDays) {
+  async _fillMissingEODData(missingDays, incompleteDaysData = null) {
     if (missingDays.length === 0) return;
 
-    console.log(`[EquityCurve] Filling ${missingDays.length} missing days`);
+    const isIncompleteRetry = incompleteDaysData !== null;
+    console.log(`[EquityCurve] Filling ${missingDays.length} ${isIncompleteRetry ? 'incomplete' : 'missing'} days`);
 
     // For each missing day, determine which stocks were open
     const tickersByDay = this._getOpenPositionsByDay(missingDays);
 
     // Collect unique tickers needed
     const allTickers = new Set();
-    for (const day of missingDays) {
-      for (const ticker of tickersByDay[day]) {
-        allTickers.add(ticker);
+
+    if (isIncompleteRetry) {
+      // For incomplete retries, only fetch the specific missing tickers
+      for (const day of missingDays) {
+        const dayData = incompleteDaysData[day];
+        if (dayData && dayData.missingTickers) {
+          for (const ticker of dayData.missingTickers) {
+            allTickers.add(ticker);
+          }
+        }
+      }
+      console.log(`[EquityCurve] Incomplete retry: only fetching ${allTickers.size} missing tickers`);
+    } else {
+      // For new missing days, fetch all tickers
+      for (const day of missingDays) {
+        for (const ticker of tickersByDay[day]) {
+          allTickers.add(ticker);
+        }
       }
     }
 
@@ -434,10 +453,17 @@ class EquityCurveManager {
       const openTickers = tickersByDay[day];
       const eodData = await this._calculateEODForDay(day, openTickers);
 
+      // For incomplete retries, preserve and increment retry count
+      let retryCount = 0;
+      if (isIncompleteRetry && incompleteDaysData[day]?.existingData) {
+        retryCount = (incompleteDaysData[day].existingData.retryCount || 0) + 1;
+      }
+
       // Store in temporary object instead of saving immediately
       tempEODData[day] = {
         ...eodData,
-        source: 'twelve_data'
+        source: isIncompleteRetry ? 'twelve_data_retry' : 'twelve_data',
+        retryCount
       };
     }
 
@@ -509,6 +535,7 @@ class EquityCurveManager {
   /**
    * Backfill incomplete days (days that failed to save properly)
    * Days that have been retried MAX_RETRIES times are skipped to prevent infinite loops
+   * OPTIMIZED: Only fetches the specific missing tickers for each incomplete day
    */
   async _backfillIncompleteDays() {
     const incompleteDays = eodCacheManager.getIncompleteDays();
@@ -536,8 +563,21 @@ class EquityCurveManager {
       console.log(`[EquityCurve] Found ${incompleteDays.length} incomplete days, backfilling`);
     }
 
-    const daysToFill = daysToRetry.map(d => d.date);
-    await this._fillMissingEODData(daysToFill);
+    // Process each incomplete day individually with its specific missing tickers
+    for (const incompleteDay of daysToRetry) {
+      const { date, data } = incompleteDay;
+      const missingTickers = data.missingTickers || [];
+
+      if (missingTickers.length === 0) {
+        console.warn(`[EquityCurve] Incomplete day ${date} has no missingTickers list, skipping`);
+        continue;
+      }
+
+      console.log(`[EquityCurve] Retrying ${date} with ${missingTickers.length} missing tickers:`, missingTickers.join(', '));
+
+      // Fetch only the missing tickers for this specific day
+      await this._fillMissingEODData([date], { [date]: { missingTickers, existingData: data } });
+    }
   }
 
   /**

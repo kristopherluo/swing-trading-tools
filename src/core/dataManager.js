@@ -36,7 +36,7 @@ export const dataManager = {
 
   async exportAllData() {
     const data = {
-      version: 3,
+      version: 4, // Incremented to include cache data with timestamps
       exportDate: new Date().toISOString(),
       settings: state.settings,
       journal: state.journal.entries,
@@ -49,6 +49,15 @@ export const dataManager = {
         finnhub: (await storage.getItem('finnhubApiKey')) || '',
         twelveData: (await storage.getItem('twelveDataApiKey')) || '',
         alphaVantage: (await storage.getItem('alphaVantageApiKey')) || ''
+      },
+      // Include cache data with timestamps to avoid refetching on import
+      caches: {
+        riskCalcPriceCache: await storage.getItem('riskCalcPriceCache'),
+        optionsPriceCache: await storage.getItem('optionsPriceCache'),
+        historicalPriceCache: await storage.getItem('historicalPriceCache'),
+        eodCache: await storage.getItem('eodCache'),
+        companySummaryCache: await storage.getItem('companySummaryCache'),
+        companyDataCache: await storage.getItem('companyDataCache')
       }
     };
 
@@ -107,9 +116,34 @@ export const dataManager = {
             await storage.setItem('alphaVantageApiKey', data.apiKeys.alphaVantage || '');
           }
 
-          // Clear EOD cache after import (imported trades may have different dates)
-          await storage.removeItem('eodCache');
-          await storage.removeItem('riskCalcPriceCache');
+          // Import cache data if available (v2+ format)
+          // Preserves timestamps so importing doesn't trigger mass API refetches
+          if (data.caches) {
+            console.log('[Import] Restoring cache data with timestamps...');
+            if (data.caches.riskCalcPriceCache) {
+              await storage.setItem('riskCalcPriceCache', data.caches.riskCalcPriceCache);
+            }
+            if (data.caches.optionsPriceCache) {
+              await storage.setItem('optionsPriceCache', data.caches.optionsPriceCache);
+            }
+            if (data.caches.historicalPriceCache) {
+              await storage.setItem('historicalPriceCache', data.caches.historicalPriceCache);
+            }
+            if (data.caches.eodCache) {
+              await storage.setItem('eodCache', data.caches.eodCache);
+            }
+            if (data.caches.companySummaryCache) {
+              await storage.setItem('companySummaryCache', data.caches.companySummaryCache);
+            }
+            if (data.caches.companyDataCache) {
+              await storage.setItem('companyDataCache', data.caches.companyDataCache);
+            }
+          } else {
+            // Old format (v1) without cache data - clear caches to force fresh fetch
+            console.log('[Import] Old format detected, clearing caches...');
+            await storage.removeItem('eodCache');
+            await storage.removeItem('riskCalcPriceCache');
+          }
 
           showToast(`📤 Imported ${data.journal.length} trades - Reloading...`, 'success');
 

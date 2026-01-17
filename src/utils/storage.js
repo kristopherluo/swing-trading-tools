@@ -34,6 +34,7 @@ class StorageAdapter {
       'companyDataCache',
       'chartDataCache',
       'riskCalcPriceCache',
+      'optionsPriceCache',
       'finnhubApiKey',
       'twelveDataApiKey',
       'alphaVantageApiKey',
@@ -205,6 +206,46 @@ class StorageAdapter {
       console.error('[Storage] Error calculating usage:', error);
       return { totalSize: 0, breakdown: {}, keys: 0 };
     }
+  }
+
+  /**
+   * Get IndexedDB quota estimate
+   * @returns {Promise<Object>} Quota info with usage, quota, and percentage
+   */
+  async getQuotaEstimate() {
+    try {
+      if (!navigator.storage || !navigator.storage.estimate) {
+        console.warn('[Storage] StorageManager API not available');
+        return { usage: 0, quota: 0, percentage: 0, available: false };
+      }
+
+      const estimate = await navigator.storage.estimate();
+      const usage = estimate.usage || 0;
+      const quota = estimate.quota || 0;
+      const percentage = quota > 0 ? (usage / quota) * 100 : 0;
+
+      return {
+        usage,
+        quota,
+        percentage: Math.round(percentage * 100) / 100,
+        available: true
+      };
+    } catch (error) {
+      console.error('[Storage] Error getting quota estimate:', error);
+      return { usage: 0, quota: 0, percentage: 0, available: false };
+    }
+  }
+
+  /**
+   * Check if storage is approaching quota (>= 80%)
+   * @returns {Promise<boolean>} True if at or above 80% capacity
+   */
+  async isApproachingQuota() {
+    const estimate = await this.getQuotaEstimate();
+    if (!estimate.available) {
+      return false; // Can't determine, assume safe
+    }
+    return estimate.percentage >= 80;
   }
 }
 

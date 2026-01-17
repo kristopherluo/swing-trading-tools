@@ -8,8 +8,10 @@ import { sleep } from './utils.js';
 import * as marketHours from '../utils/marketHours.js';
 import { storage } from '../utils/storage.js';
 import { compressText, decompressText } from '../utils/compression.js';
+import { validateAndMigrate, addSchemaVersion } from '../utils/migrations.js';
 
 const CACHE_KEY = 'riskCalcPriceCache';
+const OPTIONS_CACHE_KEY = 'optionsPriceCache';
 const SUMMARY_CACHE_KEY = 'companySummaryCache';
 const MAX_SUMMARY_CACHE = 30; // Keep only 30 most recent summaries
 
@@ -18,6 +20,7 @@ export const priceTracker = {
   optionsApiKey: null,
   cache: new Map(),
   optionsCache: new Map(),
+  decompressedSummariesCache: new Map(), // In-memory cache for decompressed summaries
   lastFetchDate: null,
   _fetchInProgress: false,
   _fetchPromise: null,
@@ -34,9 +37,11 @@ export const priceTracker = {
 
   async loadCache() {
     try {
-      const cached = await storage.getItem('riskCalcPriceCache');
+      // Load stock prices cache with migration support
+      const cached = await storage.getItem(CACHE_KEY);
       if (cached) {
-        const { prices, date, tradingDay } = cached;
+        const migrated = validateAndMigrate('riskCalcPriceCache', cached);
+        const { prices, date, tradingDay } = migrated;
         this.lastFetchDate = new Date(date);
 
         // Check if cache is still valid (same trading day)
@@ -44,6 +49,20 @@ export const priceTracker = {
         const currentTradingDay = marketHours.getTradingDay();
         if (tradingDay && tradingDay === currentTradingDay) {
           this.cache = new Map(Object.entries(prices));
+        }
+      }
+
+      // Load options prices cache with migration support
+      const optionsCached = await storage.getItem(OPTIONS_CACHE_KEY);
+      if (optionsCached) {
+        const migrated = validateAndMigrate('optionsPriceCache', optionsCached);
+        const { prices, tradingDay } = migrated;
+
+        // Check if cache is still valid (same trading day)
+        const currentTradingDay = marketHours.getTradingDay();
+        if (tradingDay && tradingDay === currentTradingDay) {
+          this.optionsCache = new Map(Object.entries(prices));
+          console.log(`[PriceTracker] Loaded ${this.optionsCache.size} options prices from cache`);
         }
       }
     } catch (e) {
@@ -55,13 +74,30 @@ export const priceTracker = {
     try {
       const prices = Object.fromEntries(this.cache);
       const now = new Date();
-      await storage.setItem('riskCalcPriceCache', {
+      const dataToSave = addSchemaVersion('riskCalcPriceCache', {
         prices,
         date: now.toISOString(),
         tradingDay: marketHours.getTradingDay(now) // Store trading day for proper expiry
       });
+      await storage.setItem(CACHE_KEY, dataToSave);
     } catch (e) {
       console.error('Failed to save price cache:', e);
+    }
+  },
+
+  async saveOptionsCache() {
+    try {
+      const prices = Object.fromEntries(this.optionsCache);
+      const now = new Date();
+      const dataToSave = addSchemaVersion('optionsPriceCache', {
+        prices,
+        date: now.toISOString(),
+        tradingDay: marketHours.getTradingDay(now) // Store trading day for proper expiry
+      });
+      await storage.setItem(OPTIONS_CACHE_KEY, dataToSave);
+      console.log(`[PriceTracker] Saved ${this.optionsCache.size} options prices to cache`);
+    } catch (e) {
+      console.error('Failed to save options price cache:', e);
     }
   },
 
@@ -215,13 +251,30 @@ export const priceTracker = {
   /**
    * Get cached company summary (decompressed)
    * Returns: { summary, name, sector, industry } or null
+   * Uses in-memory cache for decompressed summaries to avoid repeated decompression
    */
   async getCachedSummary(ticker) {
     try {
+      const upperTicker = ticker.toUpperCase();
+
+      // Check in-memory cache first (already decompressed)
+      if (this.decompressedSummariesCache.has(upperTicker)) {
+        const cached = this.decompressedSummariesCache.get(upperTicker);
+        // Verify it's not expired
+        const age = Date.now() - cached.cachedAt;
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+        if (age < thirtyDays) {
+          return cached;
+        }
+        // Expired, remove from memory cache
+        this.decompressedSummariesCache.delete(upperTicker);
+      }
+
+      // Not in memory, check IndexedDB
       const cache = await storage.getItem(SUMMARY_CACHE_KEY);
       if (!cache || !cache.summaries) return null;
 
-      const entry = cache.summaries[ticker.toUpperCase()];
+      const entry = cache.summaries[upperTicker];
       if (!entry) return null;
 
       // Check if cache is expired (30 days)
@@ -236,6 +289,9 @@ export const priceTracker = {
         ...entry,
         summary: decompressText(entry.summary)
       };
+
+      // Cache decompressed version in memory for future accesses
+      this.decompressedSummariesCache.set(upperTicker, decompressed);
 
       return decompressed;
     } catch (e) {
@@ -634,6 +690,11 @@ export const priceTracker = {
         console.error(`Error fetching price for ${trade.ticker} option:`, error);
         results.failed.push(trade.ticker);
       }
+    }
+
+    // Save options cache to IndexedDB after fetching
+    if (results.success.length > 0) {
+      await this.saveOptionsCache();
     }
 
     return results;
