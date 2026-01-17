@@ -18,6 +18,7 @@ import { calculateRealizedPnL, getTradeRealizedPnL } from '../core/utils/tradeCa
 import { formatDate } from '../utils/marketHours.js';
 import { getCashFlowOnDate, getTransactionDateString, getNetCashFlow, getCashFlowUpToDate } from '../utils/cashFlowUtils.js';
 import { getTradesOpenOnDate, getTradeEntryDateString } from '../utils/tradeUtils.js';
+import { priceTracker } from '../core/priceTracker.js';
 
 class AccountBalanceCalculator {
   /**
@@ -144,7 +145,9 @@ class AccountBalanceCalculator {
       }
     }
 
-    const unrealizedPnL = (currentPrice - trade.entry) * shares;
+    // For options, multiply by 100 (contract multiplier)
+    const multiplier = trade.assetType === 'options' ? 100 : 1;
+    const unrealizedPnL = (currentPrice - trade.entry) * shares * multiplier;
     const unrealizedPercent = ((currentPrice - trade.entry) / trade.entry) * 100;
 
     return {
@@ -177,10 +180,26 @@ class AccountBalanceCalculator {
     return allTrades
       .filter(t => t.status === 'open' || t.status === 'trimmed')
       .reduce((sum, trade) => {
-        const priceData = currentPrices[trade.ticker];
-        if (!priceData) return sum;
+        let price = null;
 
-        const price = priceData.price || priceData; // Handle both object and number
+        // For options, get price from options cache
+        if (trade.assetType === 'options') {
+          price = priceTracker.getOptionPrice(
+            trade.ticker,
+            trade.expirationDate,
+            trade.optionType,
+            trade.strike
+          );
+        } else {
+          // For stocks, get from currentPrices map
+          const priceData = currentPrices[trade.ticker];
+          if (priceData) {
+            price = priceData.price || priceData; // Handle both object and number
+          }
+        }
+
+        if (!price) return sum;
+
         const result = this.calculateTradeUnrealizedPnL(trade, price);
         return sum + result.unrealizedPnL;
       }, 0);
