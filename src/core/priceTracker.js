@@ -15,14 +15,18 @@ const MAX_SUMMARY_CACHE = 30; // Keep only 30 most recent summaries
 
 export const priceTracker = {
   apiKey: null,
+  optionsApiKey: null,
   cache: new Map(),
+  optionsCache: new Map(),
   lastFetchDate: null,
   _fetchInProgress: false,
   _fetchPromise: null,
+  _optionsRotationIndex: 0, // Track which options positions to fetch next
 
   async init() {
     // Load API key from IndexedDB
     this.apiKey = (await storage.getItem('finnhubApiKey')) || '';
+    this.optionsApiKey = (await storage.getItem('optionsPriceApiKey')) || '';
 
     // Load price cache from IndexedDB
     await this.loadCache();
@@ -505,5 +509,173 @@ export const priceTracker = {
       .sort((a, b) => a.time - b.time); // Sort oldest to newest
 
     return candles;
+  },
+
+  /**
+   * Format option contract for Polygon.io API
+   * Format: O:TICKER{YYMMDD}{C/P}{STRIKE*1000}
+   * Example: O:AAPL250117C00150000 (AAPL $150 Call expiring Jan 17, 2025)
+   */
+  formatOptionSymbol(ticker, expirationDate, optionType, strike) {
+    // Parse expiration date (YYYY-MM-DD format)
+    const date = new Date(expirationDate + 'T00:00:00');
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+
+    // Format: YYMMDD
+    const dateStr = `${year}${month}${day}`;
+
+    // Option type: C or P
+    const typeStr = optionType === 'call' ? 'C' : 'P';
+
+    // Strike price: multiply by 1000 and pad to 8 digits
+    const strikeStr = Math.round(strike * 1000).toString().padStart(8, '0');
+
+    return `O:${ticker.toUpperCase()}${dateStr}${typeStr}${strikeStr}`;
+  },
+
+  /**
+   * Fetch current price for an options contract from Polygon.io
+   */
+  async fetchOptionPrice(ticker, expirationDate, optionType, strike) {
+    if (!this.optionsApiKey) {
+      return null;
+    }
+
+    const symbol = this.formatOptionSymbol(ticker, expirationDate, optionType, strike);
+
+    try {
+      const response = await fetch(
+        `https://api.polygon.io/v2/last/trade/${symbol}?apiKey=${this.optionsApiKey}`
+      );
+
+      if (!response.ok) {
+        console.error(`Polygon API error for ${symbol}: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results) {
+        return {
+          price: data.results.p, // Last trade price
+          timestamp: data.results.t
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`Error fetching option price for ${symbol}:`, error);
+      return null;
+    }
+  },
+
+  /**
+   * Refresh options prices with rotation strategy
+   * Fetches up to 5 options per call to respect Polygon's 5 calls/min limit
+   */
+  async refreshOptionsPrices(optionsTrades) {
+    if (!this.optionsApiKey || !optionsTrades || optionsTrades.length === 0) {
+      return { success: [], failed: [] };
+    }
+
+    const results = {
+      success: [],
+      failed: []
+    };
+
+    // Determine which 5 positions to fetch this rotation
+    const totalPositions = optionsTrades.length;
+    const batchSize = Math.min(5, totalPositions);
+
+    // Calculate start index for this batch using rotation
+    const startIndex = this._optionsRotationIndex % totalPositions;
+    const tradesToFetch = [];
+
+    // Get up to 5 trades, wrapping around if needed
+    for (let i = 0; i < batchSize; i++) {
+      const index = (startIndex + i) % totalPositions;
+      tradesToFetch.push(optionsTrades[index]);
+    }
+
+    // Update rotation index for next call
+    this._optionsRotationIndex = (startIndex + batchSize) % totalPositions;
+
+    // Fetch prices for selected trades
+    for (const trade of tradesToFetch) {
+      try {
+        const priceData = await this.fetchOptionPrice(
+          trade.ticker,
+          trade.expirationDate,
+          trade.optionType,
+          trade.strike
+        );
+
+        if (priceData) {
+          // Cache the price
+          const cacheKey = `${trade.ticker}-${trade.expirationDate}-${trade.optionType}-${trade.strike}`;
+          this.optionsCache.set(cacheKey, {
+            price: priceData.price,
+            timestamp: Date.now()
+          });
+
+          results.success.push(trade.ticker);
+        } else {
+          results.failed.push(trade.ticker);
+        }
+
+        // Small delay between requests to be respectful
+        await sleep(200);
+      } catch (error) {
+        console.error(`Error fetching price for ${trade.ticker} option:`, error);
+        results.failed.push(trade.ticker);
+      }
+    }
+
+    return results;
+  },
+
+  /**
+   * Get cached option price
+   */
+  getOptionPrice(ticker, expirationDate, optionType, strike) {
+    const cacheKey = `${ticker}-${expirationDate}-${optionType}-${strike}`;
+    const cached = this.optionsCache.get(cacheKey);
+
+    if (cached) {
+      return cached.price;
+    }
+
+    return null;
+  },
+
+  /**
+   * Calculate unrealized P&L for an options trade
+   */
+  calculateOptionsUnrealizedPnL(trade) {
+    const currentPrice = this.getOptionPrice(
+      trade.ticker,
+      trade.expirationDate,
+      trade.optionType,
+      trade.strike
+    );
+
+    if (!currentPrice) {
+      return null;
+    }
+
+    const shares = trade.remainingShares ?? trade.shares;
+    const multiplier = 100; // 1 contract = 100 shares
+
+    const unrealizedPnL = (currentPrice - trade.entry) * shares * multiplier;
+    const costBasis = trade.entry * shares * multiplier;
+    const unrealizedPercent = costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
+
+    return {
+      currentPrice,
+      unrealizedPnL,
+      unrealizedPercent
+    };
   }
 };

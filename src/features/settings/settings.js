@@ -323,7 +323,7 @@ class Settings {
     if (this.elements.optionsPriceApiKey && this.elements.optionsPriceApiKeyBtn) {
       const saveOptionsPriceKey = async (apiKey) => {
         await storage.setItem('optionsPriceApiKey', apiKey);
-        // TODO: Set API key in options price tracker when implemented
+        priceTracker.optionsApiKey = apiKey;
         if (apiKey) {
           showToast('Options API key saved', 'success');
           this.setApiKeyButtonActive(this.elements.optionsPriceApiKeyBtn);
@@ -487,7 +487,7 @@ class Settings {
       this.elements.optionsPriceApiKey.value = optionsPriceKey;
     }
     if (optionsPriceKey) {
-      // TODO: Set API key in options price tracker when implemented
+      priceTracker.optionsApiKey = optionsPriceKey;
       this.setApiKeyButtonActive(this.elements.optionsPriceApiKeyBtn);
     }
 

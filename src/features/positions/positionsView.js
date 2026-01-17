@@ -490,8 +490,10 @@ class PositionsView {
       const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
       const riskPercent = (netRisk / state.account.currentSize) * 100;
 
-      // Get price data from tracker (skip for options - no live pricing yet)
-      const pnlData = isOptions ? null : priceTracker.calculateUnrealizedPnL(trade);
+      // Get price data from tracker
+      const pnlData = isOptions
+        ? priceTracker.calculateOptionsUnrealizedPnL(trade)
+        : priceTracker.calculateUnrealizedPnL(trade);
 
       // Determine status
       let statusClass = trade.status;
@@ -751,22 +753,40 @@ class PositionsView {
     }
 
     try {
+      // Fetch stock prices
       const results = await priceTracker.refreshAllActivePrices();
 
-      if (results.success.length > 0) {
+      // Fetch options prices if API key is configured
+      let optionsResults = { success: [], failed: [] };
+      if (priceTracker.optionsApiKey) {
+        const activeTrades = state.journal.entries.filter(
+          e => (e.status === 'open' || e.status === 'trimmed') && e.assetType === 'options'
+        );
+        if (activeTrades.length > 0) {
+          optionsResults = await priceTracker.refreshOptionsPrices(activeTrades);
+        }
+      }
+
+      const totalSuccess = results.success.length + optionsResults.success.length;
+      const totalFailed = results.failed.length + optionsResults.failed.length;
+
+      if (totalSuccess > 0) {
         // Only show toast for manual refresh
         if (!isAutoRefresh) {
-          showToast(`✅ Updated ${results.success.length} stock price${results.success.length > 1 ? 's' : ''}`, 'success');
+          const stockMsg = results.success.length > 0 ? `${results.success.length} stock${results.success.length > 1 ? 's' : ''}` : '';
+          const optionsMsg = optionsResults.success.length > 0 ? `${optionsResults.success.length} option${optionsResults.success.length > 1 ? 's' : ''}` : '';
+          const separator = stockMsg && optionsMsg ? ' and ' : '';
+          showToast(`✅ Updated ${stockMsg}${separator}${optionsMsg}`, 'success');
         }
 
         // Render will be triggered by the 'pricesUpdated' event
-        state.emit('pricesUpdated', results);
+        state.emit('pricesUpdated', { stocks: results, options: optionsResults });
       }
 
-      if (results.failed.length > 0) {
-        console.error('Failed to fetch some prices:', results.failed);
+      if (totalFailed > 0) {
+        console.error('Failed to fetch some prices:', { stocks: results.failed, options: optionsResults.failed });
         if (!isAutoRefresh) {
-          showToast(`Failed to fetch ${results.failed.length} price${results.failed.length > 1 ? 's' : ''}`, 'warning');
+          showToast(`Failed to fetch ${totalFailed} price${totalFailed > 1 ? 's' : ''}`, 'warning');
         }
       }
     } catch (error) {
