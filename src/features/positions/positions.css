@@ -567,6 +567,13 @@
     rgba(234, 179, 8, 0.4));
 }
 
+.position-card--options:hover::after {
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.5),
+    rgba(139, 92, 246, 0.5),
+    rgba(236, 72, 153, 0.5));
+}
+
 .position-card--trimmed {
   background:
     radial-gradient(circle at 0% 50%, rgba(245, 158, 11, 0.15) 0%, transparent 50%),
