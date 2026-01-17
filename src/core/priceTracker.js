@@ -537,6 +537,7 @@ export const priceTracker = {
 
   /**
    * Fetch current price for an options contract from Polygon.io
+   * Uses previous day's close (free tier) or snapshot (paid tier)
    */
   async fetchOptionPrice(ticker, expirationDate, optionType, strike) {
     if (!this.optionsApiKey) {
@@ -546,8 +547,9 @@ export const priceTracker = {
     const symbol = this.formatOptionSymbol(ticker, expirationDate, optionType, strike);
 
     try {
+      // Try previous day's aggregate first (available on free tier)
       const response = await fetch(
-        `https://api.polygon.io/v2/last/trade/${symbol}?apiKey=${this.optionsApiKey}`
+        `https://api.polygon.io/v2/aggs/ticker/${symbol}/prev?adjusted=true&apiKey=${this.optionsApiKey}`
       );
 
       if (!response.ok) {
@@ -557,10 +559,11 @@ export const priceTracker = {
 
       const data = await response.json();
 
-      if (data.status === 'OK' && data.results) {
+      if (data.status === 'OK' && data.results && data.results.length > 0) {
+        const result = data.results[0];
         return {
-          price: data.results.p, // Last trade price
-          timestamp: data.results.t
+          price: result.c, // Close price from previous day
+          timestamp: result.t
         };
       }
 
