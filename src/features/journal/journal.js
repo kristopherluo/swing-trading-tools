@@ -364,8 +364,8 @@ class Journal {
       const target5R = trade.entry + (5 * riskPerShare);
 
       // For trimmed trades, calculate NET risk (remaining risk - realized profit)
-      // Net risk can't go below 0
-      const netRisk = isTrimmed ? Math.max(0, currentRisk - realizedPnL) : currentRisk;
+      // For all trades, clamp to 0 minimum (stop above entry = no risk)
+      const netRisk = isTrimmed ? Math.max(0, currentRisk - realizedPnL) : Math.max(0, currentRisk);
 
       // Calculate risk percentage and color based on net risk
       const riskPercent = (netRisk / state.account.currentSize) * 100;
@@ -452,9 +452,10 @@ class Journal {
       const grossRisk = shares * riskPerShare;
 
       // For trimmed trades, subtract realized profit (net risk can't go below 0)
+      // For all trades, clamp to 0 minimum (stop above entry = no risk)
       const realizedPnL = t.totalRealizedPnL || 0;
       const isTrimmed = t.status === 'trimmed';
-      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
+      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : Math.max(0, grossRisk);
 
       return sum + netRisk;
     }, 0);

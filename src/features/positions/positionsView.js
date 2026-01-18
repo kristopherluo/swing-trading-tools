@@ -487,7 +487,8 @@ class PositionsView {
       const realizedPnL = trade.totalRealizedPnL || 0;
 
       // For trimmed trades, calculate NET risk (remaining risk - realized profit)
-      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
+      // For all trades, clamp to 0 minimum (stop above entry = no risk)
+      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : Math.max(0, grossRisk);
       const riskPercent = (netRisk / state.account.currentSize) * 100;
 
       // Get price data from tracker
@@ -583,13 +584,24 @@ class PositionsView {
         quantityHTML = `<span class="position-card__shares">${isTrimmed ? `${shares} of ${trade.originalShares}` : shares} shares</span>`;
       }
 
+      // Format setup type with proper capitalization
+      const typeLabels = {
+        'ep': 'EP',
+        'long-term': 'Long-term',
+        'base': 'Base',
+        'breakout': 'Breakout',
+        'bounce': 'Bounce',
+        'other': 'Other'
+      };
+      const formattedSetupType = setupType ? (typeLabels[setupType] || setupType.replace(/\b\w/g, l => l.toUpperCase())) : '';
+
       return `
         <div class="position-card ${shouldAnimate ? 'position-card--animate' : ''} ${isTrimmed ? 'position-card--trimmed' : ''} ${isOptions ? 'position-card--options' : ''}" data-id="${trade.id}">
           <div class="position-card__header" style="display: grid; grid-template-columns: auto 1fr; gap: var(--space-2); row-gap: 2px; align-items: start;">
             <span class="position-card__ticker" style="grid-column: 1; grid-row: 1;">${trade.ticker}</span>
             <div style="grid-column: 2; grid-row: 1 / span ${isOptions ? '3' : '2'}; display: flex; align-items: flex-start; align-content: flex-start; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end;">
               ${industry ? `<span class="position-card__badge position-card__badge--industry" style="white-space: nowrap;">${industry}</span>` : ''}
-              ${setupType ? `<span class="position-card__badge position-card__badge--type" style="white-space: nowrap;">${setupType.replace(/\b\w/g, l => l.toUpperCase())}</span>` : ''}
+              ${formattedSetupType ? `<span class="position-card__badge position-card__badge--type" style="white-space: nowrap;">${formattedSetupType}</span>` : ''}
               <span class="position-card__badge position-card__badge--${statusClass}" style="white-space: nowrap;">
                 ${statusText}
               </span>

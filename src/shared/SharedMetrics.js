@@ -31,9 +31,10 @@ class SharedMetrics {
       const grossRisk = shares * riskPerShare;
 
       // For trimmed trades, subtract realized profit (net risk can't go below 0)
+      // For all trades, clamp to 0 minimum (stop above entry = no risk)
       const realizedPnL = t.totalRealizedPnL || 0;
       const isTrimmed = t.status === 'trimmed';
-      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : grossRisk;
+      const netRisk = isTrimmed ? Math.max(0, grossRisk - realizedPnL) : Math.max(0, grossRisk);
 
       return sum + netRisk;
     }, 0);

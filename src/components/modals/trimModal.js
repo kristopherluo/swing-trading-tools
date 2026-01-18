@@ -26,6 +26,14 @@ class TrimModal {
     // Disable weekends on date inputs
     initFlatpickr(this.elements.dateInput);
     initFlatpickr(this.elements.entryDateInput);
+    // Expiration date: Match log trade popup - disable weekends, allow past/future dates
+    if (this.elements.expirationInput) {
+      initFlatpickr(this.elements.expirationInput, {
+        minDate: null,  // Allow past dates
+        maxDate: null   // Allow future dates
+        // Keep default disable option (weekends disabled)
+      });
+    }
   }
 
   cacheElements() {
@@ -36,12 +44,17 @@ class TrimModal {
       cancelBtn: document.getElementById('cancelTrimBtn'),
       confirmBtn: document.getElementById('confirmTrimBtn'),
       deleteBtn: document.getElementById('deleteTrimTradeBtn'),
+      modalSpacer: document.getElementById('trimModalSpacer'),
+      modalSpacerRight: document.getElementById('trimModalSpacerRight'),
       ticker: document.getElementById('trimModalTicker'),
       entryPrice: document.getElementById('trimEntryPrice'),
       originalStop: document.getElementById('trimOriginalStop'),
       stopLoss: document.getElementById('trimStopLoss'),
-      riskPerShare: document.getElementById('trimRiskPerShare'),
+      stopLossInput: document.getElementById('trimStopLossInput'),
+      stopLossEdit: document.getElementById('trimStopLossEdit'),
+      stopLossError: document.getElementById('trimStopLossError'),
       remainingShares: document.getElementById('trimRemainingShares'),
+      remainingSharesRow: document.getElementById('trimRemainingSharesRow'),
       exitPrice: document.getElementById('trimExitPrice'),
       rDisplay: document.getElementById('trimRDisplay'),
       exitPriceError: document.getElementById('trimExitPriceError'),
@@ -50,15 +63,8 @@ class TrimModal {
       percentDisplay: document.getElementById('trimPercentDisplay'),
       sharesError: document.getElementById('trimSharesError'),
       dateInput: document.getElementById('trimDate'),
-      newStop: document.getElementById('trimNewStop'),
-      newStopError: document.getElementById('trimNewStopError'),
-      profitPerShare: document.getElementById('trimProfitPerShare'),
-      profitPerShareLabel: document.querySelector('.trim-preview__label'),
       totalPnL: document.getElementById('trimTotalPnL'),
       preview: document.getElementById('trimPreview'),
-      onlyMoveStopCheckbox: document.getElementById('onlyMoveStopCheckbox'),
-      onlyChangeTargetCheckbox: document.getElementById('onlyChangeTargetCheckbox'),
-      newStopOptional: document.getElementById('newStopOptional'),
       editPositionDetailsBtn: document.getElementById('editPositionDetailsBtn'),
       entryPriceInput: document.getElementById('trimEntryPriceInput'),
       entryPriceEdit: document.getElementById('trimEntryPriceEdit'),
@@ -70,6 +76,10 @@ class TrimModal {
       targetDisplay: document.getElementById('trimTarget'),
       targetInput: document.getElementById('trimTargetInput'),
       targetEdit: document.getElementById('trimTargetEdit'),
+      targetRow: document.getElementById('trimTargetRow'),
+      trimSummary: document.querySelector('.trim-summary'),
+      modalContent: document.querySelector('#trimModal .modal__content'),
+      modalFooter: document.querySelector('#trimModal .modal__footer'),
       entryPriceError: document.getElementById('trimEntryPriceError'),
       originalStopError: document.getElementById('trimOriginalStopError'),
       targetError: document.getElementById('trimTargetError'),
@@ -110,16 +120,11 @@ class TrimModal {
 
     // Shares display is inside trim percentage section
     this.sections.sharesDisplay = this.elements.modal?.querySelector('.trim-shares-display');
-
-    // Find section containing new stop
-    this.sections.newStop = trimSections.find(section =>
-      section.querySelector('#trimNewStop')
-    );
   }
 
   bindEvents() {
     this.elements.closeBtn?.addEventListener('click', () => this.close());
-    this.elements.cancelBtn?.addEventListener('click', () => this.close());
+    this.elements.cancelBtn?.addEventListener('click', () => this.handleCancel());
     this.elements.overlay?.addEventListener('click', () => this.close());
 
     // Delete trade button
@@ -144,14 +149,14 @@ class TrimModal {
 
     this.elements.sharesInput?.addEventListener('input', (e) => this.sanitizeSharesInput(e));
     this.elements.exitPrice?.addEventListener('input', (e) => this.sanitizeExitPriceInput(e));
-    this.elements.newStop?.addEventListener('input', (e) => this.sanitizeNewStopInput(e));
     this.elements.entryPriceInput?.addEventListener('input', (e) => this.sanitizeEntryPriceInput(e));
     this.elements.originalStopInput?.addEventListener('input', (e) => this.sanitizeOriginalStopInput(e));
+    this.elements.stopLossInput?.addEventListener('input', (e) => this.sanitizeStopLossInput(e));
     this.elements.targetInput?.addEventListener('input', (e) => this.sanitizeTargetInput(e));
     this.elements.strikeInput?.addEventListener('input', (e) => this.sanitizeStrikeInput(e));
+    this.elements.expirationInput?.addEventListener('change', () => this.validateExpirationDate());
+    this.elements.entryDateInput?.addEventListener('change', () => this.validateExpirationDate());
     this.elements.confirmBtn?.addEventListener('click', () => this.confirm());
-    this.elements.onlyMoveStopCheckbox?.addEventListener('change', () => this.handleOnlyMoveStopToggle());
-    this.elements.onlyChangeTargetCheckbox?.addEventListener('change', () => this.handleOnlyChangeTargetToggle());
     this.elements.editPositionDetailsBtn?.addEventListener('click', () => this.handleEditPositionDetailsToggle());
   }
 
@@ -190,9 +195,6 @@ class TrimModal {
     if (this.elements.sharesLabel) {
       this.elements.sharesLabel.textContent = isOptions ? 'Contracts' : 'Shares';
     }
-    if (this.elements.profitPerShareLabel) {
-      this.elements.profitPerShareLabel.textContent = isOptions ? 'Profit per Contract' : 'Profit per Share';
-    }
 
     // Show/hide options fields
     if (this.elements.strikeRow) {
@@ -210,20 +212,24 @@ class TrimModal {
     // Cache sections (needs to be done after modal is in DOM)
     this.cacheSections();
 
-    // Reset "Only move stop" checkbox
-    if (this.elements.onlyMoveStopCheckbox) {
-      this.elements.onlyMoveStopCheckbox.checked = false;
-    }
-
-    // Reset "Only change target" checkbox
-    if (this.elements.onlyChangeTargetCheckbox) {
-      this.elements.onlyChangeTargetCheckbox.checked = false;
-    }
-
     // Reset edit mode
     this.isEditMode = false;
     if (this.elements.editPositionDetailsBtn) {
       this.elements.editPositionDetailsBtn.textContent = 'Edit position details';
+    }
+
+    // In normal mode, hide Cancel button and left spacer, show Delete button and right spacer
+    if (this.elements.cancelBtn) {
+      this.elements.cancelBtn.style.display = 'none';
+    }
+    if (this.elements.modalSpacer) {
+      this.elements.modalSpacer.style.display = 'none';
+    }
+    if (this.elements.deleteBtn) {
+      this.elements.deleteBtn.style.display = '';
+    }
+    if (this.elements.modalSpacerRight) {
+      this.elements.modalSpacerRight.style.display = '';
     }
 
     this.showAllSections();
@@ -246,6 +252,42 @@ class TrimModal {
   }
 
   close() {
+    // If in edit mode, exit it first to restore UI state
+    if (this.isEditMode) {
+      this.isEditMode = false;
+
+      // Restore all UI elements
+      this.showDisplayValues();
+      this.showAllSections();
+
+      if (this.elements.remainingSharesRow) {
+        this.elements.remainingSharesRow.style.display = '';
+      }
+
+      if (this.elements.targetRow) {
+        this.elements.targetRow.style.paddingBottom = '';
+        this.elements.targetRow.style.marginBottom = '';
+      }
+
+      if (this.elements.trimSummary) {
+        this.elements.trimSummary.style.paddingBottom = '40px';
+      }
+
+      if (this.elements.modalContent) {
+        this.elements.modalContent.style.paddingBottom = '';
+      }
+      if (this.elements.modalFooter) {
+        this.elements.modalFooter.style.paddingTop = '';
+      }
+
+      if (this.elements.editPositionDetailsBtn) {
+        this.elements.editPositionDetailsBtn.style.display = '';
+      }
+      if (this.elements.deleteBtn) {
+        this.elements.deleteBtn.style.display = '';
+      }
+    }
+
     this.elements.modal?.classList.remove('open');
     this.elements.overlay?.classList.remove('open');
     document.body.style.overflow = '';
@@ -305,6 +347,7 @@ class TrimModal {
     // Populate edit input fields
     if (this.elements.entryPriceInput) this.elements.entryPriceInput.value = trade.entry.toFixed(2);
     if (this.elements.originalStopInput) this.elements.originalStopInput.value = originalStop.toFixed(2);
+    if (this.elements.stopLossInput) this.elements.stopLossInput.value = currentStop.toFixed(2);
 
     // Populate target display and input
     // Use trade.target if set, otherwise default to 5R (match position card logic)
@@ -331,12 +374,14 @@ class TrimModal {
         this.elements.expirationDisplay.textContent = formattedExp;
       }
       if (this.elements.expirationInput && trade.expirationDate) {
-        this.elements.expirationInput.value = trade.expirationDate;
+        // Use Flatpickr's setDate method to properly populate the date picker
+        if (this.elements.expirationInput._flatpickr) {
+          this.elements.expirationInput._flatpickr.setDate(trade.expirationDate, false);
+        } else {
+          this.elements.expirationInput.value = trade.expirationDate;
+        }
       }
     }
-
-    // Clear new stop input
-    if (this.elements.newStop) this.elements.newStop.value = '';
   }
 
   selectR(e) {
@@ -515,60 +560,6 @@ class TrimModal {
     }
   }
 
-  handleOnlyMoveStopToggle() {
-    const isChecked = this.elements.onlyMoveStopCheckbox?.checked;
-
-    if (isChecked) {
-      this.hideClosingFields();
-      // Update button text
-      if (this.elements.confirmBtn) {
-        this.elements.confirmBtn.textContent = 'Confirm Move Stop';
-      }
-      // Hide "(optional)" text since new stop is required
-      if (this.elements.newStopOptional) {
-        this.elements.newStopOptional.style.display = 'none';
-      }
-    } else {
-      this.showAllSections();
-      // Recalculate preview to restore button text
-      this.calculatePreview();
-      // Show "(optional)" text
-      if (this.elements.newStopOptional) {
-        this.elements.newStopOptional.style.display = '';
-      }
-    }
-  }
-
-  handleOnlyChangeTargetToggle() {
-    const isChecked = this.elements.onlyChangeTargetCheckbox?.checked;
-
-    if (isChecked) {
-      // Hide trim percentage, close date, new stop, shares display, and P&L preview
-      // Keep R-multiple and exit price visible for target selection
-      if (this.sections.trimPercent) {
-        this.sections.trimPercent.style.display = 'none';
-      }
-      if (this.sections.closeDate) {
-        this.sections.closeDate.style.display = 'none';
-      }
-      if (this.sections.newStop) {
-        this.sections.newStop.style.display = 'none';
-      }
-      if (this.elements.preview) {
-        this.elements.preview.style.display = 'none';
-      }
-
-      // Update button text
-      if (this.elements.confirmBtn) {
-        this.elements.confirmBtn.textContent = 'Confirm Target Change';
-      }
-    } else {
-      this.showAllSections();
-      // Recalculate preview to restore button text
-      this.calculatePreview();
-    }
-  }
-
   hideClosingFields() {
     // Hide R-Multiple section
     if (this.sections.rMultiple) {
@@ -612,11 +603,6 @@ class TrimModal {
       this.sections.closeDate.style.display = '';
     }
 
-    // Show New Stop section
-    if (this.sections.newStop) {
-      this.sections.newStop.style.display = '';
-    }
-
     // Show shares display
     if (this.sections.sharesDisplay) {
       this.sections.sharesDisplay.style.display = '';
@@ -646,6 +632,15 @@ class TrimModal {
     editElements?.forEach(el => el.style.display = '');
   }
 
+  handleCancel() {
+    // If in edit mode, exit edit mode instead of closing modal
+    if (this.isEditMode) {
+      this.handleEditPositionDetailsToggle();
+    } else {
+      this.close();
+    }
+  }
+
   handleEditPositionDetailsToggle() {
     // Toggle edit mode
     this.isEditMode = !this.isEditMode;
@@ -653,61 +648,125 @@ class TrimModal {
     // Clear all errors when toggling modes
     this.clearInputError(this.elements.entryPriceInput, this.elements.entryPriceError);
     this.clearInputError(this.elements.originalStopInput, this.elements.originalStopError);
+    this.clearInputError(this.elements.stopLossInput, this.elements.stopLossError);
     this.clearInputError(this.elements.targetInput, this.elements.targetError);
+    this.clearInputError(this.elements.strikeInput, this.elements.strikeError);
+    this.clearInputError(this.elements.expirationInput, this.elements.expirationError);
     this.clearInputError(this.elements.exitPrice, this.elements.exitPriceError);
     this.clearInputError(this.elements.sharesInput, this.elements.sharesError);
-    this.clearInputError(this.elements.newStop, this.elements.newStopError);
 
     if (this.isEditMode) {
-      // Edit mode: Show inputs, hide all trim/close sections
+      // Edit mode: Ensure inputs have current trade values before showing them
+      if (this.currentTrade) {
+        this.populateTradeData(this.currentTrade);
+      }
+
+      // Show inputs, hide all trim/close sections
       this.showEditInputs();
       this.hideClosingFields();
 
-      // Also hide the "new stop" section
-      const newStopSection = this.elements.modal?.querySelector('.trim-section:has(#trimNewStop)');
-      if (newStopSection) {
-        newStopSection.style.display = 'none';
+      // Hide remaining shares row in edit mode
+      if (this.elements.remainingSharesRow) {
+        this.elements.remainingSharesRow.style.display = 'none';
       }
 
-      // Update buttons
-      if (this.elements.editPositionDetailsBtn) {
-        this.elements.editPositionDetailsBtn.textContent = 'Cancel';
+      // Reduce bottom padding on target row in edit mode to match top
+      if (this.elements.targetRow) {
+        this.elements.targetRow.style.paddingBottom = '0';
+        this.elements.targetRow.style.marginBottom = '-0.5rem';
       }
+
+      // Match container bottom padding to top padding in edit mode
+      if (this.elements.trimSummary) {
+        this.elements.trimSummary.style.paddingBottom = '24px';
+      }
+
+      // Reduce spacing between content and footer in edit mode (1/4 of original)
+      if (this.elements.modalContent) {
+        this.elements.modalContent.style.paddingBottom = '4px';
+      }
+      if (this.elements.modalFooter) {
+        this.elements.modalFooter.style.paddingTop = '4px';
+      }
+
+      // Hide Edit position details button and Delete Trade button in edit mode
+      if (this.elements.editPositionDetailsBtn) {
+        this.elements.editPositionDetailsBtn.style.display = 'none';
+      }
+      if (this.elements.deleteBtn) {
+        this.elements.deleteBtn.style.display = 'none';
+      }
+
+      // Show Cancel button and left spacer in edit mode, hide right spacer
+      if (this.elements.cancelBtn) {
+        this.elements.cancelBtn.style.display = '';
+      }
+      if (this.elements.modalSpacer) {
+        this.elements.modalSpacer.style.display = '';
+      }
+      if (this.elements.modalSpacerRight) {
+        this.elements.modalSpacerRight.style.display = 'none';
+      }
+
+      // Update confirm button
       if (this.elements.confirmBtn) {
         this.elements.confirmBtn.textContent = 'Confirm';
       }
     } else {
-      // Normal mode: Show display values, show all sections
+      // Normal mode: Reset input values to original trade values before hiding
+      if (this.currentTrade) {
+        this.populateTradeData(this.currentTrade);
+      }
+
+      // Show display values, show all sections
       this.showDisplayValues();
+      this.showAllSections();
 
-      // Check if "only move stop" is checked - if so, keep fields hidden
-      const isOnlyMoveStop = this.elements.onlyMoveStopCheckbox?.checked;
-      if (isOnlyMoveStop) {
-        this.hideClosingFields();
-        // Update button text for "only move stop" mode
-        if (this.elements.confirmBtn) {
-          this.elements.confirmBtn.textContent = 'Confirm Move Stop';
-        }
-        // Hide "(optional)" text since new stop is required
-        if (this.elements.newStopOptional) {
-          this.elements.newStopOptional.style.display = 'none';
-        }
-      } else {
-        this.showAllSections();
-        // Recalculate preview to restore button text
-        this.calculatePreview();
+      // Show remaining shares row
+      if (this.elements.remainingSharesRow) {
+        this.elements.remainingSharesRow.style.display = '';
       }
 
-      // Show the "new stop" section
-      const newStopSection = this.elements.modal?.querySelector('.trim-section:has(#trimNewStop)');
-      if (newStopSection) {
-        newStopSection.style.display = '';
+      // Restore bottom padding on target row
+      if (this.elements.targetRow) {
+        this.elements.targetRow.style.paddingBottom = '';
+        this.elements.targetRow.style.marginBottom = '';
       }
 
-      // Update buttons
+      // Restore container bottom padding
+      if (this.elements.trimSummary) {
+        this.elements.trimSummary.style.paddingBottom = '40px';
+      }
+
+      // Restore spacing between content and footer
+      if (this.elements.modalContent) {
+        this.elements.modalContent.style.paddingBottom = '';
+      }
+      if (this.elements.modalFooter) {
+        this.elements.modalFooter.style.paddingTop = '';
+      }
+
+      // Show Edit position details button and Delete Trade button
       if (this.elements.editPositionDetailsBtn) {
-        this.elements.editPositionDetailsBtn.textContent = 'Edit position details';
+        this.elements.editPositionDetailsBtn.style.display = '';
       }
+      if (this.elements.deleteBtn) {
+        this.elements.deleteBtn.style.display = '';
+      }
+
+      // Hide Cancel button and left spacer in normal mode, show right spacer
+      if (this.elements.cancelBtn) {
+        this.elements.cancelBtn.style.display = 'none';
+      }
+      if (this.elements.modalSpacer) {
+        this.elements.modalSpacer.style.display = 'none';
+      }
+      if (this.elements.modalSpacerRight) {
+        this.elements.modalSpacerRight.style.display = '';
+      }
+
+      // Recalculate preview to restore button text
+      this.calculatePreview();
     }
   }
 
@@ -719,13 +778,15 @@ class TrimModal {
       // Clear all errors first
       this.clearInputError(this.elements.entryPriceInput, this.elements.entryPriceError);
       this.clearInputError(this.elements.originalStopInput, this.elements.originalStopError);
+      this.clearInputError(this.elements.stopLossInput, this.elements.stopLossError);
       this.clearInputError(this.elements.targetInput, this.elements.targetError);
       this.clearInputError(this.elements.strikeInput, this.elements.strikeError);
       this.clearInputError(this.elements.expirationInput, this.elements.expirationError);
 
-      // Edit position details mode - update entry, original stop, and target
+      // Edit position details mode - update entry, original stop, current stop, and target
       const newEntry = parseFloat(this.elements.entryPriceInput?.value);
       const newOriginalStop = parseFloat(this.elements.originalStopInput?.value);
+      const newCurrentStop = parseFloat(this.elements.stopLossInput?.value);
       const newEntryDate = this.elements.entryDateInput?.value;
       const newTarget = parseFloat(this.elements.targetInput?.value);
       const newStrike = this.currentTrade.assetType === 'options' ? parseFloat(this.elements.strikeInput?.value) : null;
@@ -745,6 +806,15 @@ class TrimModal {
           this.elements.originalStopInput,
           this.elements.originalStopError,
           'Original stop must be greater than 0'
+        );
+        return;
+      }
+
+      if (isNaN(newCurrentStop) || newCurrentStop <= 0) {
+        this.showInputError(
+          this.elements.stopLossInput,
+          this.elements.stopLossError,
+          'Current stop must be greater than 0'
         );
         return;
       }
@@ -814,6 +884,8 @@ class TrimModal {
       const updates = {
         entry: newEntry,
         originalStop: newOriginalStop,
+        currentStop: newCurrentStop,
+        stop: newCurrentStop,
         timestamp: new Date(newEntryDate + 'T12:00:00').toISOString()
       };
 
@@ -868,55 +940,6 @@ class TrimModal {
         'success'
       );
 
-      this.close();
-      return;
-    }
-
-    // Check if "Only move stop" mode is active
-    const isOnlyMoveStop = this.elements.onlyMoveStopCheckbox?.checked;
-
-    if (isOnlyMoveStop) {
-      // Only move stop mode - no shares closed
-      const newStopValue = parseFloat(this.elements.newStop?.value);
-      if (isNaN(newStopValue) || newStopValue <= 0) {
-        showToast('Enter a new stop', 'error');
-        return;
-      }
-
-      // Update only the stop, no trimming
-      const updates = {
-        currentStop: newStopValue,
-        stop: newStopValue
-      };
-
-      state.updateJournalEntry(this.currentTrade.id, updates);
-      showToast(`${this.currentTrade.ticker} stop moved to ${formatCurrency(newStopValue)}`, 'success');
-      this.close();
-      return;
-    }
-
-    // Check if "Only change target" mode is active
-    const isOnlyChangeTarget = this.elements.onlyChangeTargetCheckbox?.checked;
-
-    if (isOnlyChangeTarget) {
-      // Only change target mode - update target without closing shares
-      const exitPrice = parseFloat(this.elements.exitPrice?.value);
-      if (isNaN(exitPrice) || exitPrice <= 0) {
-        this.showInputError(
-          this.elements.exitPrice,
-          this.elements.exitPriceError,
-          'Exit price must be a valid number greater than 0'
-        );
-        return;
-      }
-
-      // Update only the target
-      const updates = {
-        target: exitPrice
-      };
-
-      state.updateJournalEntry(this.currentTrade.id, updates);
-      showToast(`${this.currentTrade.ticker} target updated to ${formatCurrency(exitPrice)}`, 'success');
       this.close();
       return;
     }
@@ -989,13 +1012,6 @@ class TrimModal {
       trimHistory: [...this.currentTrade.trimHistory, trimEvent],
       totalRealizedPnL: newTotalPnL
     };
-
-    // Update current stop if new stop provided
-    const newStopValue = parseFloat(this.elements.newStop?.value);
-    if (!isNaN(newStopValue) && newStopValue > 0) {
-      updates.currentStop = newStopValue;
-      updates.stop = newStopValue; // Also update main stop for compatibility
-    }
 
     if (isFullClose) {
       updates.exitPrice = exitPrice;
@@ -1091,24 +1107,47 @@ class TrimModal {
     this.handleManualExitPrice();
   }
 
-  sanitizeNewStopInput(e) {
+  sanitizeStopLossInput(e) {
     // Use generic decimal sanitizer
     this.sanitizeDecimalInput(e);
 
     // Clear any existing error
-    this.clearInputError(this.elements.newStop, this.elements.newStopError);
+    this.clearInputError(this.elements.stopLossInput, this.elements.stopLossError);
 
-    // Validate new stop if value is provided
-    const value = this.elements.newStop?.value.trim();
+    // Validate current stop if value is provided
+    const value = this.elements.stopLossInput?.value.trim();
     if (value) {
-      const newStop = parseFloat(value);
-      if (!isNaN(newStop) && newStop <= 0) {
+      const currentStop = parseFloat(value);
+      if (!isNaN(currentStop) && currentStop <= 0) {
         this.showInputError(
-          this.elements.newStop,
-          this.elements.newStopError,
-          'New stop must be greater than 0'
+          this.elements.stopLossInput,
+          this.elements.stopLossError,
+          'Current stop must be greater than 0'
         );
       }
+    }
+  }
+
+  validateExpirationDate() {
+    // Clear any existing error
+    this.clearInputError(this.elements.expirationInput, this.elements.expirationError);
+
+    // Only validate if both entry date and expiration date are set
+    const entryDate = this.elements.entryDateInput?.value;
+    const expirationDate = this.elements.expirationInput?.value;
+
+    if (!entryDate || !expirationDate) return;
+
+    // Compare dates (both are in YYYY-MM-DD format)
+    const tDate = new Date(entryDate + 'T00:00:00');
+    const expDate = new Date(expirationDate + 'T00:00:00');
+
+    if (expDate < tDate) {
+      this.showInputError(
+        this.elements.expirationInput,
+        this.elements.expirationError,
+        'Expiration date cannot be before trade date'
+      );
     }
   }
 
