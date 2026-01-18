@@ -54,12 +54,13 @@ export class StatsCalculator {
 
   /**
    * Calculate wins and losses count
+   * Breakeven trades (P&L = 0) are counted as losses for win rate purposes
    */
   calculateWinsLosses(trades) {
     const closedTrades = trades.filter(e => e.status === 'closed' || e.status === 'trimmed');
 
     const wins = closedTrades.filter(t => getTradeRealizedPnL(t) > 0);
-    const losses = closedTrades.filter(t => getTradeRealizedPnL(t) < 0);
+    const losses = closedTrades.filter(t => getTradeRealizedPnL(t) <= 0);
 
     return {
       wins: wins.length,

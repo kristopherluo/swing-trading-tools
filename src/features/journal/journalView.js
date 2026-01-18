@@ -459,7 +459,7 @@ class JournalView {
       case 'losers':
         filtered = filtered.filter(t => {
           const pnl = getTradeRealizedPnL(t);
-          return (t.status === 'closed' || t.status === 'trimmed') && pnl < 0;
+          return (t.status === 'closed' || t.status === 'trimmed') && pnl <= 0;
         });
         break;
       default:
@@ -516,7 +516,7 @@ class JournalView {
     });
   }
 
-  render() {
+  async render() {
     const trades = this.getFilteredTrades();
 
     // Update count to show filtered trades
@@ -535,7 +535,7 @@ class JournalView {
       this.showEmptyState();
     } else {
       this.hideEmptyState();
-      this.renderTable(trades);
+      await this.renderTable(trades);
     }
   }
 
@@ -618,11 +618,12 @@ class JournalView {
     }
 
     // Wins and losses
+    // Breakeven trades (P&L = 0) are counted as losses for win rate purposes
     const winningTrades = closedTrades.filter(t => (getTradeRealizedPnL(t)) > 0);
-    const losingTrades = closedTrades.filter(t => (getTradeRealizedPnL(t)) < 0);
+    const losingTrades = closedTrades.filter(t => (getTradeRealizedPnL(t)) <= 0);
     const wins = winningTrades.length;
     const losses = losingTrades.length;
-    const total = wins + losses;
+    const total = closedTrades.length;
 
     // Win rate
     if (this.elements.winRate) {
@@ -667,7 +668,7 @@ class JournalView {
     }
   }
 
-  renderTable(trades) {
+  async renderTable(trades) {
     if (!this.elements.tableBody) return;
 
     // Update sort indicators in headers
@@ -681,6 +682,38 @@ class JournalView {
 
     const shouldAnimate = !this.hasAnimated;
     this.hasAnimated = true;
+
+    // Fetch all company data upfront with rate limiting
+    const companyDataMap = new Map();
+
+    // Get unique tickers to avoid duplicate fetches
+    const uniqueTickers = [...new Set(trades.map(t => t.ticker))];
+
+    // Fetch company data for each ticker
+    for (const ticker of uniqueTickers) {
+      let data = await priceTracker.getCachedCompanyData(ticker);
+
+      // If we have data but it's missing industry (only has summary from Alpha Vantage),
+      // fetch the full profile from Finnhub
+      if (data && !data.industry) {
+        const profile = await priceTracker.fetchCompanyProfile(ticker);
+        if (profile) {
+          data = profile;
+        }
+        await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit delay
+      } else if (!data) {
+        // No data at all, try to fetch profile
+        const profile = await priceTracker.fetchCompanyProfile(ticker);
+        if (profile) {
+          data = profile;
+        }
+        await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit delay
+      }
+
+      if (data && data.industry) {
+        companyDataMap.set(ticker, data);
+      }
+    }
 
     this.elements.tableBody.innerHTML = trades.map((trade, index) => {
       const pnl = getTradeRealizedPnL(trade);
@@ -766,6 +799,21 @@ class JournalView {
         optionDisplay = `<span class="journal-option-glow">${strike}${optionSymbol} ${formattedExp}</span>`;
       }
 
+      // Get company data for industry badge from the Map we fetched earlier
+      const companyData = companyDataMap.get(trade.ticker);
+      const industry = companyData?.industry || '';
+
+      // Get trade type for badge
+      const setupType = trade.thesis?.setupType;
+      const typeLabels = {
+        'long-term': 'Long-term',
+        'base': 'Base',
+        'breakout': 'Breakout',
+        'bounce': 'Bounce',
+        'other': 'Other'
+      };
+      const formattedSetupType = setupType ? (typeLabels[setupType] || setupType.replace(/\b\w/g, l => l.toUpperCase())) : '';
+
       return `
         <tr class="journal-table__row ${shouldAnimate ? 'journal-row--animate' : ''} ${rowBgClass}" data-id="${trade.id}" style="${animationDelay}">
           <td>${formatDate(trade.timestamp)}</td>
@@ -785,13 +833,19 @@ class JournalView {
             ${rMultiple !== null ? (Math.abs(rMultiple) < 0.05 ? '<span class="tag tag--breakeven">BE</span>' : `${rMultiple >= 0 ? '+' : ''}${rMultiple.toFixed(1)}R`) : '—'}
           </td>
           <td>
+            ${industry ? `<span class="position-card__badge position-card__badge--industry">${industry}</span>` : '—'}
+          </td>
+          <td>
+            ${formattedSetupType ? `<span class="position-card__badge position-card__badge--type">${formattedSetupType}</span>` : '—'}
+          </td>
+          <td>
             <span class="journal-table__status journal-table__status--${statusClass}">
               ${statusText}
             </span>
           </td>
         </tr>
         <tr class="journal-table__row-details ${isExpanded ? 'expanded' : ''}" data-details-id="${trade.id}">
-          <td colspan="11">
+          <td colspan="13">
             ${this.renderRowDetails(trade)}
           </td>
         </tr>

@@ -489,7 +489,7 @@ class Stats {
       this.elements.pnlCard?.classList.toggle('stat-card--danger', !isPositive);
     }
     if (this.elements.pnlTrades) {
-      this.elements.pnlTrades.innerHTML = `<span class="stat-card__sub--highlight">${s.totalTrades}</span> closed trade${s.totalTrades !== 1 ? 's' : ''}`;
+      this.elements.pnlTrades.innerHTML = `<span class="stat-card__sub--highlight">${s.totalTrades}</span> realized trade${s.totalTrades !== 1 ? 's' : ''}`;
     }
 
     // Win Rate
